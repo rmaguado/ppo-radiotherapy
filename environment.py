@@ -1,134 +1,78 @@
-import trimesh
-from trimesh.creation import icosphere
-from trimesh.voxel.base import VoxelGrid
-from trimesh.scene.scene import Scene
-
-from typing import List
+from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 
-def set_color_body(mesh, opacity=0.25) -> None:
-    opacity_8bit = int(255 * opacity)
-    color = np.array([0, 0, 0, opacity_8bit])
-
-    mesh.visual.face_colors[:] = color
-    mesh.visual.vertex_colors[:] = color
-
-
-def set_color_lungs(mesh, opacity=0.5) -> None:
-    opacity_8bit = int(255 * opacity)
-    color = np.array([255, 0, 0, opacity_8bit])
-
-    mesh.visual.face_colors[:] = color
-    mesh.visual.vertex_colors[:] = color
-
-
-def set_color_tumour(mesh, opacity=1.0) -> None:
-    opacity_8bit = int(255 * opacity)
-    color = np.array([0, 255, 0, opacity_8bit])
-
-    mesh.visual.face_colors[:] = color
-    mesh.visual.vertex_colors[:] = color
-
-
-def load_lungs_model() -> trimesh.Trimesh:
-    lungs_model = trimesh.load("./models/downsampled/lungs.obj")
-
-    lungs_model.apply_transform(trimesh.transformations.scale_matrix(0.0135))
-
-    lungs_model.apply_transform(
-        trimesh.transformations.rotation_matrix(-np.pi, (1, 0, 0))
-    )
-    lungs_model.apply_transform(
-        trimesh.transformations.rotation_matrix(np.pi / 2, (0, 1, 0))
-    )
-
-    lungs_model.apply_translation([-14.8, 0.12, 0.2])
-
-    set_color_lungs(lungs_model)
-    return lungs_model
-
-
-def load_human_model() -> trimesh.Trimesh:
-    human_model = trimesh.load("./models/downsampled/man.obj")
-    human_model.apply_transform(
-        trimesh.transformations.rotation_matrix(-np.pi / 2, (1, 0, 0))
-    )
-    human_model.apply_transform(
-        trimesh.transformations.rotation_matrix(np.pi / 2, (0, 1, 0))
-    )
-    set_color_body(human_model)
-    return human_model
-
-
-def is_inside(
-    lungs_mesh: trimesh.Trimesh, resolution: int, position: np.ndarray, radius: float
-) -> bool:
-    valid_tumour = True
-    for _ in range(resolution):
-        direction = np.random.normal(size=3)
-        direction /= np.linalg.norm(direction)
-        surface_point = position + direction * radius
-
-        if not lungs_mesh.contains([surface_point]):
-            valid_tumour = False
-            break
-    return valid_tumour
-
-
-def generate_n_tumours(
-    lungs_mesh: trimesh.Trimesh,
-    n_tumours: int = 5,
-    mean_radius: float = 0.1,
-    std_radius: float = 0.05,
-    resolution: int = 20,
-) -> List[trimesh.Trimesh]:
+def apply_rotation(
+    direction: np.ndarray, rotation_vector: np.ndarray, max_slope: float, epsilon=1e-6
+) -> np.ndarray:
     """
-    Generate `n_tumours` random tumours (nodules) entirely within the lungs mesh.
+    Rotate the direction vector while enforcing slope constraints along the axial dimension.
 
     Args:
-        lungs_mesh (trimesh.Trimesh): The 3D model of the lungs.
-        n_tumours (int): The number of tumours to generate.
-        mean_radius (float): Mean radius of the tumours.
-        std_radius (float): Standard deviation of the radius of the tumours.
-        resolution (int): Number of points to sample on the sphere surface for validation.
+        direction (np.ndarray): The original direction vector (must be a unit vector).
+        rotation_vector (np.ndarray): A 3D array [Delta_theta_x, Delta_theta_y, Delta_theta_z].
+        max_slope (float): The maximum allowed absolute slope (Z component / vector norm).
+        epsilon (float): In case the direction is the z-vector.
 
     Returns:
-        List[trimesh.Trimesh]: List of tumour meshes.
+        np.ndarray: The new constrained direction vector.
     """
-    bounds = lungs_mesh.bounds
-    min_bound, max_bound = bounds[0], bounds[1]
+    direction = direction / np.linalg.norm(direction)
 
-    tumours = []
-    for _ in range(n_tumours):
-        valid_tumour = False
-        while not valid_tumour:
-            position = np.random.uniform(min_bound, max_bound)
-            radius = np.abs(np.random.normal(mean_radius, std_radius))
+    quaternion = R.from_rotvec(rotation_vector)
+    new_direction = quaternion.apply(direction)
 
-            valid_tumour = is_inside(lungs_mesh, resolution, position, radius)
-        tumour = trimesh.primitives.Sphere(radius=radius, center=position)
-        set_color_tumour(tumour)
+    z_component = new_direction[0]
+    z_component_slope = np.abs(z_component) / np.linalg.norm(new_direction)
 
-        tumours.append(tumour)
+    if np.abs(z_component_slope) > max_slope:
+        if np.abs(new_direction[1]) == 0 and np.abs(new_direction[2]) == 0:
+            new_direction = np.array(
+                [max_slope * np.sign(z_component), (1 - max_slope), 0]
+            )
+        else:
+            new_direction = np.array(
+                [
+                    (1 - max_slope) * np.sign(z_component),
+                    new_direction[1],
+                    new_direction[2],
+                ]
+            )
+        new_direction = new_direction / np.linalg.norm(new_direction)
 
-    return tumours
+    return new_direction
 
 
-def voxelize(mesh, pitch=0.5) -> VoxelGrid:
-    voxelized = mesh.voxelized(pitch=pitch, method="ray")
-    return voxelized.matrix
+def apply_translation(
+    position: np.ndarray, translation_vector: np.ndarray, bounds: np.ndarray
+) -> np.ndarray:
+    """
+    Translate the position vector while enforcing position constraints.
+
+    Args:
+        position (np.ndarray): The original position vector.
+        translation_vector (np.ndarray): A 3D array [Delta_x, Delta_y, Delta_z].
+        bounds (np.ndarray): A 2x3 array [[x_min, y_min, z_min], [x_max, y_max, z_max]]
+                             defining the allowed position range.
+
+    Returns:
+        np.ndarray: The new constrained position vector.
+    """
+    new_position = position + translation_vector
+
+    new_position = np.clip(new_position, bounds[0], bounds[1])
+
+    return new_position
 
 
-def main():
-    human_model = load_human_model()
-    lungs = load_lungs_model()
-
-    tumours = generate_n_tumours(lungs, n_tumours=5)
-
-    scene = Scene(tumours + [lungs, human_model])
-    scene.show(resolution=(800, 600))
+class RadiotherapyEnvironment:
+    def __init__(self):
+        # voxel images
+        self.lungs = None
+        self.tumours = None
+        self.dose = None
+        self.beams = []
 
 
 if __name__ == "__main__":
-    main()
+    pass

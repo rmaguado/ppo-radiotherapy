@@ -5,7 +5,7 @@ def main(model_dir: str, output_dir: str, target_face_count: int, aggression: fl
 
     mesh = trimesh.load(model_dir)
 
-    # print(f"Initial number of faces: {len(mesh.faces)}")
+    print(f"Initial number of faces: {len(mesh.faces)}")
 
     downsampled_mesh = mesh.simplify_quadric_decimation(
         face_count=target_face_count, aggression=aggression
@@ -17,8 +17,8 @@ def main(model_dir: str, output_dir: str, target_face_count: int, aggression: fl
 
 
 if __name__ == "__main__":
-    model_dir = "./models/segmentation.obj"
-    output_dir = "./models/downsampled/segmentation.obj"
+    model_dir = "./segmentation.obj"
+    output_dir = "./downsampled/segmentation.obj"
     target_face_count = 1000
     aggression = 5
 
