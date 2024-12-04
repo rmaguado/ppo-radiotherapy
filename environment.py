@@ -8,7 +8,7 @@ import os
 import datetime
 
 from visualize_voxel import view_observation_slices
-from graphics import beam_voxels, create_animation
+from graphics import beam_voxels, create_animation, create_scene
 from transforms import apply_rotation, apply_translation
 
 
@@ -81,16 +81,11 @@ class RadiotherapyEnv(gym.Env):
 
     def reset_beam(self):
         self.beams = []
-        self.beam_position = np.array(
-            [0.0, 0.0, 0.0], dtype=np.float32
-        )  # corner of the lung box
-        self.beam_direction = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+        self.beam_position = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.beam_direction = np.array([1.0, 1.0, 1.0], dtype=np.float32)
 
     def reset_dose(self):
         self.dose = np.zeros_like(self.lungs, dtype=np.float32)
-
-    def grid_to_world(self, grid_position):
-        box_shape = np.array(self.LUNG_SHAPE)
 
     def add_beam(self, position, direction):
         self.dose += beam_voxels(self.lungs, position, direction)
@@ -196,7 +191,7 @@ class RadiotherapyEnv(gym.Env):
 
         return np.clip(stacked, 0.0, 1.0)
 
-    def render(self):
+    def export_animation(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         create_animation(
             self.tumours_meta,
@@ -205,6 +200,13 @@ class RadiotherapyEnv(gym.Env):
             filename=f"animations/{timestamp}.gif",
             export_gif=self.export_gif,
             window=True,
+        )
+
+    def render(self):
+        create_scene(
+            self.tumours_meta,
+            self.beams,
+            self.LUNG_SHAPE,
         )
 
     def inspect_observation(self):
@@ -227,20 +229,13 @@ def test_check_env():
 def test_observation_render():
     env = RadiotherapyEnv()
 
-    env.inspect_observation()
-
     env.step(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
-
-    env.inspect_observation()
-
-    env.step(np.array([0.1, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0, 0.0]))
-
-    env.inspect_observation()
-
+    env.step(np.array([0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
+    env.step(np.array([0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0, 0.0]))
     env.step(np.array([0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
+    env.step(np.array([0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 1.0, 0.0]))
 
     env.inspect_observation()
-
     env.render()
     env.close()
 

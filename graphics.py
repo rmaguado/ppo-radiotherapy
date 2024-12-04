@@ -208,14 +208,18 @@ def pregenerate_voxel_data(save_path: str, n_tumours: int, pitch=0.05) -> None:
         np.save(tumour_save_path, tumour_matrix)
 
 
-def beam_voxels(base_matrix, position, direction):
+import numpy as np
+
+
+def beam_voxels(base_matrix, position, direction, epsilon=1e-6):
     """
-    Discretizes a line in a 3D matrix using Xiaolin Wu's Algorithm
+    Discretizes a line in a 3D matrix using Xiaolin Wu's Algorithm with numerical stability.
 
     Parameters:
         base_matrix (np.ndarray): The 3D matrix defining the space.
-        position (tuple): The starting position of the beam as a 3D tuple (x, y, z).
+        position (tuple): The translation vector of the beam as a 3D tuple (x, y, z).
         direction (tuple): The direction vector of the beam.
+        epsilon (float): Tolerance for numerical errors in the direction vector.
 
     Returns:
         np.ndarray: The 3D matrix with the discretized beam applied.
@@ -224,14 +228,18 @@ def beam_voxels(base_matrix, position, direction):
 
     position = np.array(position, dtype=np.float32)
     direction = np.array(direction, dtype=np.float32)
-    direction /= np.linalg.norm(direction)
+
+    norm = np.linalg.norm(direction)
+    if norm < epsilon:
+        raise ValueError("Direction vector magnitude is too small.")
+    direction /= norm
 
     grid_size = base_matrix.shape
 
     t_min = []
     t_max = []
     for i in range(3):
-        if direction[i] != 0:
+        if abs(direction[i]) > epsilon:
             t1 = (-position[i]) / direction[i]
             t2 = (grid_size[i] - 1 - position[i]) / direction[i]
             t_entry_i = min(t1, t2)
@@ -239,9 +247,8 @@ def beam_voxels(base_matrix, position, direction):
         else:
             if position[i] < 0 or position[i] > grid_size[i] - 1:
                 return output
-            else:
-                t_entry_i = -np.inf
-                t_exit_i = np.inf
+            t_entry_i = -np.inf
+            t_exit_i = np.inf
         t_min.append(t_entry_i)
         t_max.append(t_exit_i)
     t_entry = max(t_min)
@@ -253,28 +260,20 @@ def beam_voxels(base_matrix, position, direction):
     dominant_axis = np.argmax(dir_abs)
     other_axes = [i for i in range(3) if i != dominant_axis]
 
-    if direction[dominant_axis] > 0:
-        start_voxel = int(
-            np.floor(position[dominant_axis] + t_entry * direction[dominant_axis])
-        )
-        end_voxel = int(
-            np.floor(position[dominant_axis] + t_exit * direction[dominant_axis])
-        )
-        step = 1
-    else:
-        start_voxel = int(
-            np.floor(position[dominant_axis] + t_entry * direction[dominant_axis])
-        )
-        end_voxel = int(
-            np.floor(position[dominant_axis] + t_exit * direction[dominant_axis])
-        )
-        step = -1
+    step = 1 if direction[dominant_axis] > 0 else -1
+
+    start_voxel = int(
+        np.floor(position[dominant_axis] + t_entry * direction[dominant_axis])
+    )
+    end_voxel = int(
+        np.floor(position[dominant_axis] + t_exit * direction[dominant_axis])
+    )
 
     intery = position[other_axes[0]] + t_entry * direction[other_axes[0]]
     interz = position[other_axes[1]] + t_entry * direction[other_axes[1]]
 
-    gradient_y = direction[other_axes[0]] / direction[dominant_axis]
-    gradient_z = direction[other_axes[1]] / direction[dominant_axis]
+    gradient_y = direction[other_axes[0]] / (direction[dominant_axis] + epsilon)
+    gradient_z = direction[other_axes[1]] / (direction[dominant_axis] + epsilon)
 
     x = start_voxel
     while (x - end_voxel) * step <= 0:
@@ -329,6 +328,28 @@ def export_scene(scene, resolution=(800, 600)):
     image = Image.open(io.BytesIO(image_data))
     image = image.convert("RGBA")
     return image
+
+
+def create_scene(
+    tumours_data,
+    beams_data,
+    lung_shape,
+):
+    human_model = load_human_model()
+    lungs = load_lungs_model()
+
+    lungs_bounds = lungs.bounds
+    beam_scaling = (lungs_bounds[1] - lungs_bounds[0]) / np.array(lung_shape)
+
+    tumours = [get_tumour(position, radius) for (position, radius) in tumours_data]
+    beams = [
+        create_beam(
+            lungs, position * beam_scaling, direction * beam_scaling, use_center=False
+        )
+        for (position, direction) in beams_data
+    ]
+    scene = Scene([tumours] + beams + [lungs, human_model])
+    scene.show(resolution=(800, 600))
 
 
 def create_animation(
