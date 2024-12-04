@@ -2,7 +2,7 @@ import trimesh
 from trimesh.creation import icosphere
 from trimesh.scene.scene import Scene
 
-from typing import List, Tuple
+from typing import List
 from tqdm import tqdm
 import numpy as np
 from PIL import Image

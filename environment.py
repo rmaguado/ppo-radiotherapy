@@ -1,4 +1,3 @@
-from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 from stable_baselines3.common.env_checker import check_env
