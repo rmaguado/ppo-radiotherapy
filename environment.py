@@ -40,6 +40,8 @@ class RadiotherapyEnv(gym.Env):
         self.dose = None
         self.beams = []
 
+        self.export_gif = False
+
         self.t = 0
         self.beam_position = None
         self.beam_direction = None
@@ -191,7 +193,9 @@ class RadiotherapyEnv(gym.Env):
 
     def render(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        create_animation(self.tumours_meta, self.beams, filename=f"{timestamp}.gif")
+        create_animation(
+            self.tumours_meta, self.beams, f"{timestamp}.gif", self.export_gif, True
+        )
 
     def inspect_observation(self):
         observation = self.observation()

@@ -6,6 +6,7 @@ from typing import List, Tuple
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
+import matplotlib.pyplot as plt
 import io
 import os
 
@@ -324,7 +325,9 @@ def export_scene(scene, resolution=(800, 600)):
     return image
 
 
-def create_animation(tumours_data, beams_data, filename="animation.gif"):
+def create_animation(
+    tumours_data, beams_data, filename="animation.gif", export_gif=True, window=False
+):
     human_model = load_human_model()
     lungs = load_lungs_model()
 
@@ -344,13 +347,28 @@ def create_animation(tumours_data, beams_data, filename="animation.gif"):
         image = export_scene(scene)
         frames.append(image)
 
-    frames[0].save(
-        filename,
-        save_all=True,
-        append_images=frames[1:],
-        duration=500,
-        loop=0,
-    )
+    if export_gif:
+        frames[0].save(
+            filename,
+            save_all=True,
+            append_images=frames[1:],
+            duration=500,
+            loop=0,
+        )
+
+    if window:
+        fig, ax = plt.subplots()
+        img = ax.imshow(frames[0])
+        ax.axis("off")
+
+        def update(frame):
+            img.set_data(frame)
+            return (img,)
+
+        ani = plt.animation.FuncAnimation(
+            fig, update, frames=frames, interval=500, blit=True
+        )
+        plt.show()
 
 
 def test_scene():
