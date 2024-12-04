@@ -40,14 +40,12 @@ def view_slices(voxel_matrix, axis=2):
 
 
 def view_observation_slices(voxel_matrix, axis=2):
-    volume1, volume2, volume3, volume4 = np.split(voxel_matrix, 4, axis=3)
-
     def get_slice(volume, idx):
         slice_obj = [slice(None), slice(None), slice(None)]
         slice_obj[axis] = idx
         return volume[tuple(slice_obj)]
 
-    max_slices = volume1.shape[axis]
+    max_slices = voxel_matrix[0].shape[axis]
 
     fig, axes = plt.subplots(2, 2, figsize=(6, 8))
     plt.tight_layout()
@@ -55,7 +53,7 @@ def view_observation_slices(voxel_matrix, axis=2):
     initial_slice = 0
 
     imgs = []
-    volumes = [volume1, volume2, volume3, volume4]
+    volumes = [voxel_matrix[i] for i in range(4)]
     for ax, volume in zip(axes.flat, volumes):
         img = ax.imshow(get_slice(volume, initial_slice), cmap="gray", vmin=0, vmax=1)
         ax.set_xticks([])
