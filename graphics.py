@@ -81,10 +81,15 @@ def create_beam(
     direction: np.ndarray,
     radius: float = 0.1,
     length: float = 10.0,
+    use_center: bool = True,
 ) -> trimesh.Trimesh:
     beam = trimesh.creation.cylinder(radius=radius, height=length, sections=8)
 
-    lungs_position = lungs_mesh.bounding_box.centroid
+    if use_center:
+        lungs_position = lungs_mesh.bounding_box.centroid
+    else:
+        # corner
+        lungs_position = lungs_mesh.bounds[0]
     translation = position + lungs_position
 
     direction = direction / np.linalg.norm(direction)
@@ -329,6 +334,7 @@ def export_scene(scene, resolution=(800, 600)):
 def create_animation(
     tumours_data,
     beams_data,
+    lung_shape=None,
     filename="animations/test.gif",
     export_gif=True,
     window=False,
@@ -336,9 +342,18 @@ def create_animation(
     human_model = load_human_model()
     lungs = load_lungs_model()
 
+    lungs_bounds = lungs.bounds
+    if lung_shape is not None:
+        beam_scaling = (lungs_bounds[1] - lungs_bounds[0]) / np.array(lung_shape)
+    else:
+        beam_scaling = 1.0
+
     tumours = [get_tumour(position, radius) for (position, radius) in tumours_data]
     beams = [
-        create_beam(lungs, position, direction) for (position, direction) in beams_data
+        create_beam(
+            lungs, position * beam_scaling, direction * beam_scaling, use_center=False
+        )
+        for (position, direction) in beams_data
     ]
 
     camera_transform = np.load("camera_transform.npy")

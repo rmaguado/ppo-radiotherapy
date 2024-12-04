@@ -25,7 +25,8 @@ class RadiotherapyEnv(gym.Env):
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
-    LUNG_SHAPE = LUNGS_ARRAY.shape
+    LUNG_SHAPE = np.array(LUNGS_ARRAY.shape)
+    TRANSLATION_BOUNDS = LUNG_SHAPE - 1
     OBSERVATION_SHAPE = (LUNG_SHAPE[0], LUNG_SHAPE[1], LUNG_SHAPE[2], 4)
 
     metadata = {"render_modes": ["human"], "render_fps": 30}
@@ -80,11 +81,16 @@ class RadiotherapyEnv(gym.Env):
 
     def reset_beam(self):
         self.beams = []
-        self.beam_position = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.beam_position = np.array(
+            [0.0, 0.0, 0.0], dtype=np.float32
+        )  # corner of the lung box
         self.beam_direction = np.array([0.0, 0.0, 1.0], dtype=np.float32)
 
     def reset_dose(self):
         self.dose = np.zeros_like(self.lungs, dtype=np.float32)
+
+    def grid_to_world(self, grid_position):
+        box_shape = np.array(self.LUNG_SHAPE)
 
     def add_beam(self, position, direction):
         self.dose += beam_voxels(self.lungs, position, direction)
@@ -101,9 +107,7 @@ class RadiotherapyEnv(gym.Env):
             np.ndarray: The translation vector. Range is [0, shape - 1].
         """
 
-        translation_bounds = np.array(self.LUNG_SHAPE) - 1
-
-        return normalized_translation * translation_bounds
+        return normalized_translation * self.TRANSLATION_BOUNDS
 
     def map_rotation(self, normalized_rotation):
         """
@@ -166,7 +170,7 @@ class RadiotherapyEnv(gym.Env):
         rotation = self.map_rotation(normalized_rotation)
 
         new_position, overshoot_translation = apply_translation(
-            self.beam_position, translation, np.array(self.LUNG_SHAPE) - 1
+            self.beam_position, translation, self.TRANSLATION_BOUNDS
         )
         new_direction, overshoot_rotation = apply_rotation(
             self.beam_direction, rotation, self.MAX_SLOPE
@@ -197,9 +201,10 @@ class RadiotherapyEnv(gym.Env):
         create_animation(
             self.tumours_meta,
             self.beams,
-            f"animations/{timestamp}.gif",
-            self.export_gif,
-            True,
+            self.LUNG_SHAPE,
+            filename=f"animations/{timestamp}.gif",
+            export_gif=self.export_gif,
+            window=True,
         )
 
     def inspect_observation(self):
@@ -224,10 +229,18 @@ def test_observation_render():
 
     env.inspect_observation()
 
-    # add default beam
     env.step(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
 
     env.inspect_observation()
+
+    env.step(np.array([0.1, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0, 0.0]))
+
+    env.inspect_observation()
+
+    env.step(np.array([0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
+
+    env.inspect_observation()
+
     env.render()
     env.close()
 

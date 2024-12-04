@@ -60,7 +60,7 @@ def apply_translation(
     position: np.ndarray, translation_vector: np.ndarray, bounds: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     translated_position = position + translation_vector
-    bounded_new_position = np.clip(translated_position, bounds[0], bounds[1])
+    bounded_new_position = np.clip(translated_position, 0, bounds)
     overshoot = np.abs(translated_position - bounded_new_position)
 
     return bounded_new_position, overshoot
