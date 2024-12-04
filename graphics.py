@@ -7,6 +7,7 @@ from tqdm import tqdm
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 import io
 import os
 
@@ -326,7 +327,11 @@ def export_scene(scene, resolution=(800, 600)):
 
 
 def create_animation(
-    tumours_data, beams_data, filename="animation.gif", export_gif=True, window=False
+    tumours_data,
+    beams_data,
+    filename="animations/test.gif",
+    export_gif=True,
+    window=False,
 ):
     human_model = load_human_model()
     lungs = load_lungs_model()
@@ -357,7 +362,7 @@ def create_animation(
         )
 
     if window:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8, 6))
         img = ax.imshow(frames[0])
         ax.axis("off")
 
@@ -365,9 +370,7 @@ def create_animation(
             img.set_data(frame)
             return (img,)
 
-        ani = plt.animation.FuncAnimation(
-            fig, update, frames=frames, interval=500, blit=True
-        )
+        ani = FuncAnimation(fig, update, frames=frames, interval=500, blit=True)
         plt.show()
 
 
@@ -411,12 +414,8 @@ def test_animation():
     )
     beams_data = [(beam_position, rotation) for rotation in beam_rotations]
 
-    create_animation(tumours_data, beams_data)
+    create_animation(tumours_data, beams_data, export_gif=True, window=True)
 
 
 if __name__ == "__main__":
-    pregenerate_voxel_data(
-        "./data",
-        n_tumours=1000,
-        pitch=0.05,
-    )
+    test_animation()
