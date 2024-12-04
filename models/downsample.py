@@ -17,6 +17,7 @@ def main(model_dir: str, output_dir: str, target_face_count: int, aggression: fl
 
 
 if __name__ == "__main__":
+    print("fast-simplification must be installed which causes dependency conflicts.")
     model_dir = "./segmentation.obj"
     output_dir = "./downsampled/segmentation.obj"
     target_face_count = 1000
