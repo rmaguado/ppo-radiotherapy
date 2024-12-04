@@ -1,11 +1,15 @@
 import trimesh
 from trimesh.creation import icosphere
-from trimesh.voxel.base import VoxelGrid
 from trimesh.scene.scene import Scene
 
-from typing import List
+from typing import List, Tuple
+from tqdm import tqdm
 import numpy as np
+from PIL import Image
+import io
 import os
+
+from transforms import apply_rotation
 
 
 def set_color_body(mesh, opacity=0.25) -> None:
@@ -76,19 +80,20 @@ def create_beam(
     radius: float = 0.1,
     length: float = 10.0,
 ) -> trimesh.Trimesh:
+    beam = trimesh.creation.cylinder(radius=radius, height=length, sections=8)
 
     lungs_position = lungs_mesh.bounding_box.centroid
     translation = position + lungs_position
 
     direction = direction / np.linalg.norm(direction)
     z_axis = np.array([0, 0, 1])
-    rotation = trimesh.transformations.rotation_matrix(
-        trimesh.transformations.angle_between_vectors(z_axis, direction),
-        np.cross(z_axis, direction),
-    )
+    angle = trimesh.transformations.angle_between_vectors(z_axis, direction)
+    cross = np.cross(z_axis, direction)
 
-    beam = trimesh.creation.cylinder(radius=radius, height=length, sections=8)
-    beam.apply_transform(rotation)
+    if np.linalg.norm(cross) > 1e-6:
+        rotation = trimesh.transformations.rotation_matrix(angle, cross)
+        beam.apply_transform(rotation)
+
     beam.apply_translation(translation)
     set_color_beam(beam)
 
@@ -110,27 +115,45 @@ def is_inside(
     return valid_tumour
 
 
+def get_tumour(position, radius):
+    tumour = icosphere(radius=radius, subdivisions=2)
+    tumour.apply_translation(position)
+
+    set_color_tumour(tumour)
+    return tumour
+
+
 def generate_tumour(
     lungs_mesh: trimesh.Trimesh,
     mean_radius: float = 0.1,
     std_radius: float = 0.05,
     resolution: int = 20,
+    min_size: float = 0.05,
 ) -> List[trimesh.Trimesh]:
     bounds = lungs_mesh.bounds
     min_bound, max_bound = bounds[0], bounds[1]
 
     valid_tumour = False
     while not valid_tumour:
-        position = np.random.uniform(min_bound, max_bound)
-        radius = np.abs(np.random.normal(mean_radius, std_radius))
+        position, radius = get_random_sphere_bounded(
+            mean_radius, std_radius, min_bound, max_bound
+        )
+        if radius < min_size:
+            continue
 
         valid_tumour = is_inside(lungs_mesh, resolution, position, radius)
-    tumour = icosphere(radius=radius, subdivisions=2)
-    tumour.apply_translation(position)
 
-    set_color_tumour(tumour)
+    tumour = get_tumour(position, radius)
 
     return tumour, (position, radius)
+
+
+def get_random_sphere_bounded(
+    mean_radius, std_radius, min_bound, max_bound, accuracy=2
+):
+    position = np.round(np.random.uniform(min_bound, max_bound), accuracy)
+    radius = np.round(np.abs(np.random.normal(mean_radius, std_radius)), accuracy)
+    return position, radius
 
 
 def embed_tumour_in_lungs(tumour, lungs_bounds, lungs_matrix, pitch):
@@ -158,6 +181,8 @@ def voxelize(mesh, pitch):
 
 
 def pregenerate_voxel_data(save_path: str, n_tumours: int, pitch=0.05) -> None:
+    # tumour filename format: x_y_z_radius.npy
+
     lungs_save_path = os.path.join(save_path, "lungs.npy")
     tumours_save_dir = os.path.join(save_path, "tumours")
     os.makedirs(tumours_save_dir, exist_ok=True)
@@ -166,12 +191,13 @@ def pregenerate_voxel_data(save_path: str, n_tumours: int, pitch=0.05) -> None:
     lungs_shape, lungs_bounds, lungs_matrix = voxelize(lungs, pitch)
     np.save(lungs_save_path, lungs_matrix)
 
-    for tumour_idx in range(n_tumours):
+    for _ in tqdm(range(n_tumours)):
 
-        tumour, _ = generate_tumour(lungs)
+        tumour, (position, radius) = generate_tumour(lungs)
         tumour_matrix = embed_tumour_in_lungs(tumour, lungs_bounds, lungs_matrix, pitch)
 
-        tumour_save_path = os.path.join(tumours_save_dir, f"{tumour_idx:04d}.npy")
+        tumour_filename = f"{position[0]}_{position[1]}_{position[2]}_{radius}.npy"
+        tumour_save_path = os.path.join(tumours_save_dir, tumour_filename)
         np.save(tumour_save_path, tumour_matrix)
 
 
@@ -280,19 +306,51 @@ def beam_voxels(base_matrix, position, direction):
     return output
 
 
-def test_add_beam():
-    import matplotlib.pyplot as plt
-
+def export_transformation_matrix():
+    human_model = load_human_model()
     lungs = load_lungs_model()
-    lungs_shape, lungs_bounds, lungs_matrix = voxelize(lungs, pitch=0.05)
+    scene = Scene([lungs, human_model])
+    scene.show(resolution=(800, 600))
+    camera_transform = scene.camera_transform
 
-    test_position = np.array([0, 0, 0])
-    test_direction = np.array([0, 1, 0.75])
+    print(camera_transform)
+    np.save("camera_transform.npy", camera_transform)
 
-    dose_matrix = beam_voxels(lungs_matrix, test_position, test_direction)
 
-    plt.imshow(dose_matrix[0, :, :])
-    plt.show()
+def export_scene(scene, resolution=(800, 600)):
+    image_data = scene.save_image(resolution=resolution, visible=True)
+    image = Image.open(io.BytesIO(image_data))
+    image = image.convert("RGBA")
+    return image
+
+
+def create_animation(tumours_data, beams_data, filename="animation.gif"):
+    human_model = load_human_model()
+    lungs = load_lungs_model()
+
+    tumours = [get_tumour(position, radius) for (position, radius) in tumours_data]
+    beams = [
+        create_beam(lungs, position, direction) for (position, direction) in beams_data
+    ]
+
+    camera_transform = np.load("camera_transform.npy")
+
+    frames = []
+    for i in range(len(beams)):
+
+        scene = Scene([tumours] + beams[: i + 1] + [lungs, human_model])
+        scene.camera_transform = camera_transform
+
+        image = export_scene(scene)
+        frames.append(image)
+
+    frames[0].save(
+        filename,
+        save_all=True,
+        append_images=frames[1:],
+        duration=500,
+        loop=0,
+    )
 
 
 def test_scene():
@@ -301,7 +359,7 @@ def test_scene():
 
     tumour, _ = generate_tumour(lungs)
 
-    beam = create_beam(lungs, np.array([0, 0, 0]), np.array([0, 1, 0]))
+    beam = create_beam(lungs, np.array([0, 0, 0]), np.array([0, 0, 1]))
 
     beams = [beam]
 
@@ -309,5 +367,38 @@ def test_scene():
     scene.show(resolution=(800, 600))
 
 
+def generate_rotation_sequence(start_direction, rotation, n_steps):
+    rotation_vector = np.array(rotation) / n_steps
+
+    direction = start_direction
+    sequence = [direction]
+    for _ in range(n_steps):
+        direction, overshoot = apply_rotation(
+            direction, rotation_vector, min_angle=np.pi / 4
+        )
+        sequence.append(direction)
+
+    return sequence
+
+
+def test_animation():
+    lungs = load_lungs_model()
+
+    _, (position, radius) = generate_tumour(lungs)
+    tumours_data = [(position, radius)]
+
+    beam_position = np.array([0, 0, 0])
+    beam_rotations = generate_rotation_sequence(
+        np.array([0, 1, 0]), np.array([0, 0, -np.pi / 4]), 10
+    )
+    beams_data = [(beam_position, rotation) for rotation in beam_rotations]
+
+    create_animation(tumours_data, beams_data)
+
+
 if __name__ == "__main__":
-    test_add_beam()
+    pregenerate_voxel_data(
+        "./data",
+        n_tumours=1000,
+        pitch=0.05,
+    )
