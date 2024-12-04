@@ -49,8 +49,8 @@ def view_observation_slices(voxel_matrix, axis=2):
 
     max_slices = volume1.shape[axis]
 
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
-    plt.subplots_adjust(bottom=0.2)
+    fig, axes = plt.subplots(2, 2, figsize=(6, 8))
+    plt.tight_layout()
 
     initial_slice = 0
 
@@ -58,7 +58,8 @@ def view_observation_slices(voxel_matrix, axis=2):
     volumes = [volume1, volume2, volume3, volume4]
     for ax, volume in zip(axes.flat, volumes):
         img = ax.imshow(get_slice(volume, initial_slice), cmap="gray", vmin=0, vmax=1)
-        ax.set_title(f"Slice {initial_slice}")
+        ax.set_xticks([])
+        ax.set_yticks([])
         imgs.append(img)
 
     ax_slider = plt.axes([0.2, 0.05, 0.6, 0.03])
@@ -70,12 +71,12 @@ def view_observation_slices(voxel_matrix, axis=2):
         valinit=initial_slice,
         valstep=1,
     )
+    plt.subplots_adjust(bottom=0.1)
 
     def update(val):
         slice_idx = int(slider.val)
         for ax, img, volume in zip(axes.flat, imgs, volumes):
             img.set_data(get_slice(volume, slice_idx))
-            ax.set_title(f"Slice {slice_idx}")
         fig.canvas.draw_idle()
 
     slider.on_changed(update)
