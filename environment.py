@@ -189,12 +189,18 @@ class RadiotherapyEnv(gym.Env):
 
     def observation(self):
         current_beam = beam_voxels(self.lungs, self.beam_position, self.beam_direction)
-        return np.stack([self.lungs, self.tumours, self.dose, current_beam], axis=0)
+        stacked = np.stack([self.lungs, self.tumours, self.dose, current_beam], axis=0)
+
+        return np.clip(stacked, 0.0, 1.0)
 
     def render(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         create_animation(
-            self.tumours_meta, self.beams, f"{timestamp}.gif", self.export_gif, True
+            self.tumours_meta,
+            self.beams,
+            f"animations/{timestamp}.gif",
+            self.export_gif,
+            True,
         )
 
     def inspect_observation(self):
@@ -214,9 +220,16 @@ def test_check_env():
     env.close()
 
 
-def test_inspect_observation():
+def test_observation_render():
     env = RadiotherapyEnv()
+
     env.inspect_observation()
+
+    # add default beam
+    env.step(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
+
+    env.inspect_observation()
+    env.render()
     env.close()
 
 
@@ -228,4 +241,4 @@ def test_observation_shape():
 
 
 if __name__ == "__main__":
-    test_inspect_observation()
+    test_observation_render()
