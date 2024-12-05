@@ -8,16 +8,19 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 class Custom3DCNN(BaseFeaturesExtractor):
 
-    def __init__(self, observation_space: spaces.Box, features_dim: int = 256):
+    def __init__(self, observation_space: spaces.Box, features_dim: int = 128):
         super().__init__(observation_space, features_dim)
         n_input_channels = observation_space.shape[0]
         self.cnn = nn.Sequential(
             nn.Conv3d(n_input_channels, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
+            nn.MaxPool3d(kernel_size=2, stride=2),
             nn.Conv3d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
+            nn.MaxPool3d(kernel_size=2, stride=2),
             nn.Conv3d(64, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
+            nn.MaxPool3d(kernel_size=2, stride=2),
             nn.Flatten(),
         )
 
@@ -41,9 +44,9 @@ def test_custom_cnn():
         features_extractor_kwargs=dict(features_dim=128),
     )
 
-    model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
+    model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1, n_steps=128)
 
-    model.learn(10)
+    model.learn(total_timesteps=256, progress_bar=True)
 
 
 if __name__ == "__main__":
