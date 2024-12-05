@@ -2,6 +2,7 @@
 Modified from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_continuous_action.py
 """
 
+import os
 import random
 import time
 
@@ -15,43 +16,34 @@ import wandb
 import argparse
 import omegaconf
 
-from environment import RadiotherapyEnv
-
 
 def get_argparser():
-    parser = argparse.ArgumentParser(description="PPO agent", add_help=True)
+    parser = argparse.ArgumentParser(description="PPO agent")
     parser.add_argument(
-        "--config-file",
+        "--config",
         type=str,
         default="configs/default.yaml",
         help="path to the config file",
     )
-    parser.add_argument("--output_dir", type=str, help="path to the output directory")
     return parser
 
 
 def get_config():
     parser = get_argparser()
     args = parser.parse_args()
-    cfg = omegaconf.OmegaConf.load(args.config_file)
+    cfg = omegaconf.OmegaConf.load(args.config_path)
     cfg.batch_size = int(cfg.num_envs * cfg.num_steps)
     cfg.minibatch_size = int(cfg.batch_size // cfg.num_minibatches)
     cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
-    cfg.output_dir = args.output_dir
     return cfg
 
 
-def make_env(Env, gamma):
+def make_env(env, gamma):
     def thunk():
-        env = Env()
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
-        env = gym.wrappers.TransformObservation(
-            env,
-            lambda obs: np.clip(obs, -10, 10),
-            observation_space=env.observation_space,
-        )
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
@@ -66,7 +58,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class FeaturesExtractor3D(nn.Module):
-    def __init__(self, observation_shape, features_dim):
+    def __init__(self, observation_shape, features_dim: int = 128):
         super().__init__()
         self.observation_shape = observation_shape
         n_input_channels = observation_shape[0]
@@ -87,29 +79,29 @@ class FeaturesExtractor3D(nn.Module):
             sample_input = torch.zeros(observation_shape).unsqueeze(0)
             n_flatten = self.cnn(sample_input).shape[1]
 
-        self.linear = nn.Sequential(
-            layer_init(nn.Linear(n_flatten, features_dim)), nn.ReLU()
-        )
+        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ReLU())
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         return self.linear(self.cnn(observations))
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, observation_shape, features_dim):
+    def __init__(self, envs, args):
         super().__init__()
-        self.features_dim = features_dim
-        self.observation_shape = observation_shape
-        self.features_extractor = FeaturesExtractor3D(observation_shape, features_dim)
+        self.features_extractor = FeaturesExtractor3D()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(features_dim, 64)),
+            layer_init(
+                nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)
+            ),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 1), std=1.0),
         )
         self.actor_mean = nn.Sequential(
-            layer_init(nn.Linear(features_dim, 64)),
+            layer_init(
+                nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)
+            ),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
@@ -125,8 +117,7 @@ class Agent(nn.Module):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        features = self.features_extractor(x)
-        action_mean = self.actor_mean(features)
+        action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
         probs = Normal(action_mean, action_std)
@@ -136,7 +127,7 @@ class Agent(nn.Module):
             action,
             probs.log_prob(action).sum(1),
             probs.entropy().sum(1),
-            self.critic(features),
+            self.critic(x),
         )
 
 
@@ -190,6 +181,7 @@ def train(
     envs: gym.vector.SyncVectorEnv,
     device: torch.device,
 ):
+    # ALGO Logic: Storage setup
     obs = torch.zeros(
         (cfg.num_steps, cfg.num_envs) + envs.single_observation_space.shape
     ).to(device)
@@ -201,7 +193,7 @@ def train(
     dones = torch.zeros((cfg.num_steps, cfg.num_envs)).to(device)
     values = torch.zeros((cfg.num_steps, cfg.num_envs)).to(device)
 
-    # TRY NOT TO MODIFY
+    # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
     next_obs, _ = envs.reset(seed=cfg.seed)
@@ -209,6 +201,7 @@ def train(
     next_done = torch.zeros(cfg.num_envs).to(device)
 
     for iteration in range(1, cfg.num_iterations + 1):
+        # Annealing the rate if instructed to do so.
         if cfg.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / cfg.num_iterations
             lrnow = frac * cfg.learning_rate
@@ -354,6 +347,7 @@ if __name__ == "__main__":
     run_name = f"{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
     wandb.init(
         project=cfg.wandb_project_name,
+        sync_tensorboard=True,
         config=cfg,
         name=run_name,
         monitor_gym=True,
@@ -366,20 +360,30 @@ if __name__ == "__main__":
         assert torch.cuda.is_available(), "CUDA is not available"
     device = torch.device("cuda" if cfg.cuda else "cpu")
 
+    # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(RadiotherapyEnv, cfg.gamma) for i in range(cfg.num_envs)]
+        [
+            make_env(cfg.env_id, i, cfg.capture_video, run_name, cfg.gamma)
+            for i in range(cfg.num_envs)
+        ]
     )
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
 
-    agent = Agent(envs, RadiotherapyEnv.OBSERVATION_SHAPE, features_dim=128).to(device)
+    agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
-    train(cfg, agent, optimizer, envs, device)
+    train(
+        cfg=cfg,
+        agent=agent,
+        optimizer=optimizer,
+        envs=envs,
+        device=device,
+    )
 
     if cfg.save_model:
-        model_path = f"{cfg.output_dir}/{run_name}.model"
+        model_path = f"runs/{run_name}/{cfg.exp_name}.model"
         torch.save(agent.state_dict(), model_path)
 
     envs.close()

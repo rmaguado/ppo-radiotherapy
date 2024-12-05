@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## NAME GPUTYPE
+## NAME CONF GPUTYPE
 
 #SBATCH --job-name=$NAME
 #SBATCH --output=$OUT/$NAME/$NAME-%j.out
@@ -23,5 +23,5 @@ export PYTHONPATH=$PWD
 
 srun --unbuffered --ntasks=1 --cpus-per-task=16 \
     python3 ${PWD}/train.py \
-            --config-file="${PWD}/configs/$NAME.yaml" \
+            --config-file="${PWD}/configs/$CONF" \
             --output-dir="${PWD}/runs/$NAME"

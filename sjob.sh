@@ -8,10 +8,11 @@ if [ ! -e $DHOME/sjob.template ]; then
   exit 1
 fi
 
-# NAME GPUTYPE [W]
+# NAME CONF GPUTYPE [W]
 
 export NAME=$1
-export GPUTYPE=${2:-L40S}
+export CONF=$2
+export GPUTYPE=${3:-L40S}
 
 if [ "$GPUTYPE" != "A40" -a "$GPUTYPE" != "L40S" ]; then
   echo "$GPUTYPE not available"
@@ -21,7 +22,7 @@ fi
 if [ ! -z $2 ]; then 
   printf "\nJob name: $NAME. Using $GPUTYPE \n"
   mkdir -p $OUT/$NAME
-  envsubst '$NAME $GPUTYPE $OUT' < $PWD/sjob.template > $OUT/$NAME/$NAME.run
+  envsubst '$NAME $CONF $GPUTYPE $OUT' < $PWD/sjob.template > $OUT/$NAME/$NAME.run
   sbatch $OUT/$NAME/$NAME.run
 
 else
