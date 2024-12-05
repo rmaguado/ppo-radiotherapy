@@ -27,7 +27,7 @@ class RadiotherapyEnv(gym.Env):
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
     LUNG_SHAPE = np.array(LUNGS_ARRAY.shape)
     TRANSLATION_BOUNDS = LUNG_SHAPE - 1
-    OBSERVATION_SHAPE = (LUNG_SHAPE[0], LUNG_SHAPE[1], LUNG_SHAPE[2], 4)
+    OBSERVATION_SHAPE = (4, LUNG_SHAPE[0], LUNG_SHAPE[1], LUNG_SHAPE[2])
 
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
