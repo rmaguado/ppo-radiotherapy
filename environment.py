@@ -8,7 +8,7 @@ import os
 import datetime
 
 from visualize_voxel import view_observation_slices
-from graphics import beam_voxels, create_animation, create_scene
+from draw_line import beam_voxels
 from transforms import apply_rotation, apply_translation
 
 
@@ -195,6 +195,8 @@ class RadiotherapyEnv(gym.Env):
         return np.clip(stacked, 0.0, 1.0)
 
     def export_animation(self):
+        from graphics import create_animation
+
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         create_animation(
             self.tumours_meta,
@@ -206,6 +208,8 @@ class RadiotherapyEnv(gym.Env):
         )
 
     def render(self):
+        from graphics import create_scene
+
         create_scene(
             self.tumours_meta,
             self.beams,

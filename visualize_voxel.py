@@ -2,8 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
-import trimesh
-
 
 def view_slices(voxel_matrix, axis=2):
     def get_slice(idx):
@@ -82,11 +80,6 @@ def view_observation_slices(voxel_matrix, axis=2):
     plt.show()
 
 
-def view_volume(voxel_matrix: np.ndarray):
-    voxel_mesh = trimesh.voxel.VoxelGrid(voxel_matrix)
-    voxel_mesh.show(resolution=[800, 800])
-
-
 if __name__ == "__main__":
     voxel_matrix = np.zeros((32, 32, 32))
     x, y, z = np.ogrid[-16:16, -16:16, -16:16]
@@ -95,4 +88,3 @@ if __name__ == "__main__":
     voxel_matrix[mask] = 1
 
     view_slices(voxel_matrix)
-    # view_volume(voxel_matrix)
