@@ -17,8 +17,8 @@
 #SBATCH --time=14400
 
 source $HOME/.conda_rc
-conda activate dino2t24
-cd $HOME/projects/radio-foundation
+conda activate rl-radio
+cd $HOME/projects/rl-radiotherapy
 export PYTHONPATH=$PWD
 
 srun --unbuffered --ntasks=1 --cpus-per-task=16 \

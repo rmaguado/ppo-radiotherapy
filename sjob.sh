@@ -19,12 +19,12 @@ if [ "$GPUTYPE" != "A40" -a "$GPUTYPE" != "L40S" ]; then
 fi
 
 if [ ! -z $2 ]; then 
-  printf "\nJob  name: $NAME  using $GPUTYPE \n"
-  mkdir -p $OUT/$CONF
+  printf "\nJob name: $NAME. Using $GPUTYPE \n"
+  mkdir -p $OUT/$NAME
   envsubst '$NAME $GPUTYPE $OUT' < $PWD/sjob.template > $OUT/$NAME/$NAME.run
   sbatch $OUT/$NAME/$NAME.run
 
 else
-  printf "\nneed NAME and GPUTYPE(A40|L40S)\n\n"
+  printf "\nneed NAME GPUTYPE(A40|L40S)\n\n"
 
 fi
