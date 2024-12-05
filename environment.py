@@ -16,10 +16,11 @@ class RadiotherapyEnv(gym.Env):
     ACTION_SIZE = 8
     MAX_TIME_STEPS = 100
     MAX_SLOPE = 0.6
+    BEAM_DOSE = 0.05
     LUNG_DOSE_THRESHOLD = 0.1
     TUMOUR_DOSE_THRESHOLD = 0.9
-    LUNG_DOSE_REWARD = -1.0
-    TUMOUR_DOSE_REWARD = -100.0
+    LUNG_DOSE_REWARD = -0.1
+    TUMOUR_DOSE_REWARD = 1.0
     OVERSHOOT_TRANSLATION_REWARD = -0.1
     OVERSHOOT_ROTATION_REWARD = -0.1
 
@@ -88,7 +89,8 @@ class RadiotherapyEnv(gym.Env):
         self.dose = np.zeros_like(self.lungs, dtype=np.float32)
 
     def add_beam(self, position, direction):
-        self.dose += beam_voxels(self.lungs, position, direction)
+        self.dose += beam_voxels(self.lungs, position, direction) * self.BEAM_DOSE
+        self.dose = np.clip(self.dose, 0.0, 1.0)
         self.beams.append((position, direction))
 
     def map_translation(self, normalized_translation):
@@ -122,11 +124,9 @@ class RadiotherapyEnv(gym.Env):
 
     def tumour_dose_reward(self):
         tumour_dose = self.dose * self.tumours
-        threshold_mask = tumour_dose > self.TUMOUR_DOSE_THRESHOLD
-        above_threshold_dose = np.sum(threshold_mask * tumour_dose)
-        dose_ratio = above_threshold_dose / np.sum(self.tumours)
+        total_tumour_dose = np.sum(tumour_dose)
 
-        return (1 - dose_ratio) * self.TUMOUR_DOSE_REWARD
+        return total_tumour_dose * self.TUMOUR_DOSE_REWARD
 
     def lungs_dose_reward(self):
         lungs_dose = self.dose * self.lungs * (1 - self.tumours)
@@ -183,7 +183,10 @@ class RadiotherapyEnv(gym.Env):
 
         self.t += 1
 
-        return self.observation(), reward, False, False, {}
+        if self.t >= self.MAX_TIME_STEPS:
+            self.done = True
+
+        return self.observation(), reward, self.done, False, {}
 
     def observation(self):
         current_beam = beam_voxels(self.lungs, self.beam_position, self.beam_direction)
