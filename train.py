@@ -204,16 +204,17 @@ def train(
             lrnow = frac * cfg.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
+        episode_metrics = {
+            "completed": 0,
+            "returns": [],
+            "lengths": [],
+            "lung_dose_rewards": [],
+            "tumour_dose_rewards": [],
+            "overshoot_rewards": [],
+            "movement_rewards": [],
+        }
+
         for step in range(0, cfg.num_steps):
-            episode_metrics = {
-                "completed": 0,
-                "returns": [],
-                "lengths": [],
-                "lung_dose_rewards": [],
-                "tumour_dose_rewards": [],
-                "overshoot_rewards": [],
-                "movement_rewards": [],
-            }
             global_step += cfg.num_envs
             obs[step] = next_obs
             dones[step] = next_done
@@ -236,6 +237,7 @@ def train(
             ).to(device)
 
             parse_infos(infos, episode_metrics)
+
         log_episode_metrics(global_step, episode_metrics, logger)
 
         # bootstrap value if not done
