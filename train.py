@@ -293,7 +293,7 @@ def train(
                 nn.utils.clip_grad_norm_(agent.parameters(), cfg.max_grad_norm)
                 optimizer.step()
 
-            if cfg.target_kl is not None and approx_kl > cfg.target_kl:
+            if cfg.target_kl != "None" and approx_kl > cfg.target_kl:
                 break
 
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
