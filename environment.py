@@ -22,6 +22,8 @@ class RadiotherapyEnv(gym.Env):
     TUMOUR_DOSE_REWARD = 1.0
     OVERSHOOT_TRANSLATION_REWARD = -1.0
     OVERSHOOT_ROTATION_REWARD = -1.0
+    STILL_PENALTY_REWARD = -1.0  # TODO: add penalty for staying still
+    MOVEMENT_THRESHOLD = 0.01
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
@@ -128,15 +130,22 @@ class RadiotherapyEnv(gym.Env):
     def tumour_dose_reward(self):
         tumour_dose = self.dose * self.tumours
         total_tumour_dose = np.sum(tumour_dose)
+        total_tumour = np.sum(self.tumours)
 
-        return total_tumour_dose * self.TUMOUR_DOSE_REWARD
+        tumour_dose_reward = total_tumour_dose / total_tumour * self.TUMOUR_DOSE_REWARD
+
+        return tumour_dose_reward
 
     def lungs_dose_reward(self):
-        lungs_dose = self.dose * self.lungs * (1 - self.tumours)
+        lungs_mask = self.lungs * (1 - self.tumours)
+        lungs_dose = self.dose * lungs_mask
         threshold_mask = lungs_dose > self.LUNG_DOSE_THRESHOLD
         above_threshold_dose = np.sum(threshold_mask * lungs_dose)
+        total_lung = np.sum(lungs_mask)
 
-        return above_threshold_dose * self.LUNG_DOSE_REWARD
+        lung_dose_reward = above_threshold_dose / total_lung * self.LUNG_DOSE_REWARD
+
+        return lung_dose_reward
 
     def dose_reward(self):
         return self.tumour_dose_reward() + self.lungs_dose_reward()
