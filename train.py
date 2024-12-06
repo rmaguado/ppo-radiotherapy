@@ -168,6 +168,9 @@ def parse_infos(infos, episode_metrics):
     episode_metrics["overshoot_rewards"] += list(
         reward_components["overshoot"][completed]
     )
+    episode_metrics["movement_rewards"] += list(
+        reward_components["movement"][completed]
+    )
 
 
 def train(
@@ -209,6 +212,7 @@ def train(
                 "lung_dose_rewards": [],
                 "tumour_dose_rewards": [],
                 "overshoot_rewards": [],
+                "movement_rewards": [],
             }
             global_step += cfg.num_envs
             obs[step] = next_obs

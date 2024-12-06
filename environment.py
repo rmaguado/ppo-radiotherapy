@@ -13,12 +13,12 @@ from transforms import apply_rotation, apply_translation
 
 
 class RadiotherapyEnv(gym.Env):
-    ACTION_SIZE = 8
+    ACTION_SIZE = 6
     MAX_TIME_STEPS = 100
     MAX_SLOPE = 0.6
     BEAM_DOSE = 0.05
     LUNG_DOSE_THRESHOLD = 0.1
-    LUNG_DOSE_REWARD = -0.01
+    LUNG_DOSE_REWARD = -0.1
     TUMOUR_DOSE_REWARD = 1.0
     OVERSHOOT_TRANSLATION_REWARD = -1.0
     OVERSHOOT_ROTATION_REWARD = -1.0
@@ -147,9 +147,6 @@ class RadiotherapyEnv(gym.Env):
 
         return lung_dose_reward
 
-    def dose_reward(self):
-        return self.tumour_dose_reward() + self.lungs_dose_reward()
-
     def overshoot_reward(self, translation_overshoot, rotation_overshoot):
         translation_reward = (
             np.sum(translation_overshoot) * self.OVERSHOOT_TRANSLATION_REWARD
@@ -158,16 +155,30 @@ class RadiotherapyEnv(gym.Env):
 
         return translation_reward + rotation_reward
 
-    def map_bool(self, beam_on):
-        return beam_on > 0.0
+    def still_penalty_reward(self, translation, rotation):
+        translation_magnitude = np.linalg.norm(translation)
+        rotation_magnitude = np.linalg.norm(rotation)
+
+        if (
+            translation_magnitude < self.MOVEMENT_THRESHOLD
+            and rotation_magnitude < self.MOVEMENT_THRESHOLD
+        ):
+            return self.STILL_PENALTY_REWARD
+
+    def is_fully_irradiated(self):
+        tumour_dose = self.dose * self.tumours
+        total_tumour_dose = np.sum(tumour_dose)
+        total_tumour = np.sum(self.tumours)
+
+        if total_tumour_dose / total_tumour >= 0.99:
+            return True
+        return False
 
     def step(self, action):
         self.t += 1
 
         normalized_translation = action[:3]
         normalized_rotation = action[3:6]
-        is_beam_on = self.map_bool(action[6])
-        self.done = self.map_bool(action[7])
 
         translation = self.map_translation(normalized_translation)
         rotation = self.map_rotation(normalized_rotation)
@@ -179,29 +190,28 @@ class RadiotherapyEnv(gym.Env):
             self.beam_direction, rotation, self.MAX_SLOPE
         )
 
-        if not self.done:
-            self.beam_position = new_position
-            self.beam_direction = new_direction
+        self.beam_position = new_position
+        self.beam_direction = new_direction
 
-            if is_beam_on:
-                self.add_beam(self.beam_position, self.beam_direction)
+        self.add_beam(self.beam_position, self.beam_direction)
 
         tumour_dose_reward = self.tumour_dose_reward()
         lungs_dose_reward = self.lungs_dose_reward()
         overshoot_reward = self.overshoot_reward(
             overshoot_translation, overshoot_rotation
         )
+        still_penalty_reward = self.still_penalty_reward(translation, rotation)
 
         reward = tumour_dose_reward + lungs_dose_reward + overshoot_reward
 
-        if self.t >= self.MAX_TIME_STEPS:
-            self.done = True
+        self.done = self.is_fully_irradiated() or self.t >= self.MAX_TIME_STEPS
 
         info = {
             "reward_components": {
                 "tumour": tumour_dose_reward,
                 "lung": lungs_dose_reward,
                 "overshoot": overshoot_reward,
+                "movement": still_penalty_reward,
             }
         }
 
