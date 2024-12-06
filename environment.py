@@ -18,11 +18,10 @@ class RadiotherapyEnv(gym.Env):
     MAX_SLOPE = 0.6
     BEAM_DOSE = 0.05
     LUNG_DOSE_THRESHOLD = 0.1
-    TUMOUR_DOSE_THRESHOLD = 0.9
-    LUNG_DOSE_REWARD = -0.1
+    LUNG_DOSE_REWARD = -0.01
     TUMOUR_DOSE_REWARD = 1.0
-    OVERSHOOT_TRANSLATION_REWARD = -0.1
-    OVERSHOOT_ROTATION_REWARD = -0.1
+    OVERSHOOT_TRANSLATION_REWARD = -1.0
+    OVERSHOOT_ROTATION_REWARD = -1.0
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
@@ -57,6 +56,8 @@ class RadiotherapyEnv(gym.Env):
         self.action_space = spaces.Box(
             low=-1.0, high=1.0, shape=(self.ACTION_SIZE,), dtype=np.float32
         )
+
+        self.max_episode_steps = self.MAX_TIME_STEPS
 
     def reset(self, seed=None, options=None):
         self.reset_tumours()
@@ -176,19 +177,22 @@ class RadiotherapyEnv(gym.Env):
             if is_beam_on:
                 self.add_beam(self.beam_position, self.beam_direction)
 
-        reward = self.dose_reward() + self.overshoot_reward(
+        tumour_dose_reward = self.tumour_dose_reward()
+        lungs_dose_reward = self.lungs_dose_reward()
+        overshoot_reward = self.overshoot_reward(
             overshoot_translation, overshoot_rotation
         )
+
+        reward = tumour_dose_reward + lungs_dose_reward + overshoot_reward
 
         if self.t >= self.MAX_TIME_STEPS:
             self.done = True
 
         info = {
-            "episode": {
-                "r": reward,
-                "l": self.t,
-                "tumour_dose": self.tumour_dose_reward(),
-                "lung_dose": self.lungs_dose_reward(),
+            "reward_components": {
+                "tumour": tumour_dose_reward,
+                "lung": lungs_dose_reward,
+                "overshoot": overshoot_reward,
             }
         }
 
