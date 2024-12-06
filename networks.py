@@ -22,13 +22,13 @@ class FeaturesExtractor3D(nn.Module):
         n_input_channels = observation_shape[0]
 
         first_pool_padding = tuple(
-            (2 - ((observation_shape[i + 1] - 2) % 2)) for i in range(3)
+            ((observation_shape[i + 1] - 2) % 2) for i in range(3)
         )
 
         self.cnn = nn.Sequential(
             nn.Conv3d(n_input_channels, 32, 3),
             nn.ReLU(),
-            nn.MaxPool3d(2, 2, first_pool_padding),
+            nn.MaxPool3d(2, 2, padding=first_pool_padding),
             nn.Conv3d(32, 64, 3),
             nn.ReLU(),
             nn.MaxPool3d(2, 2),
