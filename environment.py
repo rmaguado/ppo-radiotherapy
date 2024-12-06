@@ -164,6 +164,7 @@ class RadiotherapyEnv(gym.Env):
             and rotation_magnitude < self.MOVEMENT_THRESHOLD
         ):
             return self.STILL_PENALTY_REWARD
+        return 0.0
 
     def is_fully_irradiated(self):
         tumour_dose = self.dose * self.tumours
