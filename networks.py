@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions.normal import Normal
+from torchsummary import summary
 import numpy as np
 
 
@@ -11,20 +12,41 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class FeaturesExtractor3D(nn.Module):
+    """
+    Structure adapted from C3D https://arxiv.org/pdf/1412.0767
+    """
+
     def __init__(self, observation_shape, features_dim):
         super().__init__()
         self.observation_shape = observation_shape
         n_input_channels = observation_shape[0]
+
+        kernel_size = 3
+        input_layer_padding = tuple(
+            (kernel_size - (observation_shape[i + 1] % kernel_size)) % kernel_size
+            for i in range(3)
+        )
+        first_pool_padding = tuple(
+            (2 - (observation_shape[i + 1] % 2)) % 2 for i in range(3)
+        )
+
         self.cnn = nn.Sequential(
-            nn.Conv3d(n_input_channels, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv3d(
+                n_input_channels,
+                32,
+                kernel_size,
+                input_layer_padding,
+            ),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=2, stride=2),
-            nn.Conv3d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.MaxPool3d(2, 2, first_pool_padding),
+            nn.Conv3d(32, 64, kernel_size),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=2, stride=2),
-            nn.Conv3d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.MaxPool3d(2, 2),
+            nn.Conv3d(64, 128, kernel_size),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=2, stride=2),
+            nn.Conv3d(128, 128, kernel_size),
+            nn.ReLU(),
+            nn.MaxPool3d(2, 2),
             nn.Flatten(),
         )
 
@@ -32,19 +54,23 @@ class FeaturesExtractor3D(nn.Module):
             sample_input = torch.zeros(observation_shape).unsqueeze(0)
             n_flatten = self.cnn(sample_input).shape[1]
 
-        self.linear = nn.Sequential(
-            layer_init(nn.Linear(n_flatten, features_dim)), nn.ReLU()
+        self.mlp = nn.Sequential(
+            layer_init(nn.Linear(n_flatten, features_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(features_dim, features_dim)),
+            nn.ReLU(),
         )
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        return self.linear(self.cnn(observations))
+        return self.mlp(self.cnn(observations))
 
 
 class PPO(nn.Module):
-    def __init__(self, envs, observation_shape, features_dim):
+    def __init__(self, envs, observation_shape, features_dim, show_summary=False):
         super().__init__()
         self.features_dim = features_dim
         self.observation_shape = observation_shape
+        self.action_space = np.prod(envs.single_action_space.shape)
         self.features_extractor = FeaturesExtractor3D(observation_shape, features_dim)
         self.critic = nn.Sequential(
             layer_init(nn.Linear(features_dim, 64)),
@@ -59,12 +85,22 @@ class PPO(nn.Module):
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
             layer_init(
-                nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01
+                nn.Linear(64, self.action_space),
+                std=0.01,
             ),
         )
         self.actor_logstd = nn.Parameter(
-            torch.zeros(1, np.prod(envs.single_action_space.shape))
+            torch.zeros(1, self.action_space, dtype=torch.float32)
         )
+        if show_summary:
+            self.summary()
+
+    def summary(self):
+        print("Observation shape: ", self.observation_shape)
+        print("Action space: ", self.action_space)
+        print("Features dim: ", self.features_dim)
+        print("Features extractor: ")
+        summary(self.features_extractor, self.observation_shape)
 
     def get_value(self, x):
         features = self.features_extractor(x)

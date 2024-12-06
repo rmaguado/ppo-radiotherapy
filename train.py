@@ -292,7 +292,9 @@ if __name__ == "__main__":
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
 
-    agent = PPO(envs, RadiotherapyEnv.OBSERVATION_SHAPE, features_dim=128).to(device)
+    agent = PPO(
+        envs, RadiotherapyEnv.OBSERVATION_SHAPE, features_dim=1024, show_summary=True
+    ).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
     train(cfg, agent, optimizer, envs, device)
