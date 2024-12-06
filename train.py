@@ -37,6 +37,7 @@ def get_config():
     cfg.batch_size = int(cfg.num_envs * cfg.num_steps)
     cfg.minibatch_size = int(cfg.batch_size // cfg.num_minibatches)
     cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
+    cfg.save_model_iterations = cfg.save_timesteps // cfg.batch_size
     cfg.output_dir = args.output_dir
     return cfg
 
@@ -315,6 +316,10 @@ def train(
             logger,
         )
 
+        if cfg.save_model and iteration % cfg.save_model_iterations == 0:
+            model_path = f"{cfg.output_dir}/{run_name}_{iteration}.model"
+            torch.save(agent.state_dict(), model_path)
+
 
 if __name__ == "__main__":
     cfg = get_config()
@@ -339,9 +344,5 @@ if __name__ == "__main__":
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
     train(cfg, agent, optimizer, envs, device)
-
-    if cfg.save_model:
-        model_path = f"{cfg.output_dir}/{run_name}.model"
-        torch.save(agent.state_dict(), model_path)
 
     envs.close()
