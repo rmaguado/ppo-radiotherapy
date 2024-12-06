@@ -79,6 +79,7 @@ class RadiotherapyEnv(gym.Env):
             tumour_path = f"./data/tumours/{tumour_filename}"
             self.tumours += np.load(tumour_path).astype(np.float32)
             self.tumours_meta.append((tumour_position, tumour_radius))
+        self.tumours = np.clip(self.tumours, 0.0, 1.0)
 
     def reset_beam(self):
         self.beams = []
@@ -103,8 +104,8 @@ class RadiotherapyEnv(gym.Env):
         Returns:
             np.ndarray: The translation vector. Range is [0, shape - 1].
         """
-
-        return normalized_translation * self.TRANSLATION_BOUNDS
+        clipped_translation = np.clip(normalized_translation, -1.0, 1.0)
+        return clipped_translation * self.TRANSLATION_BOUNDS
 
     def map_rotation(self, normalized_rotation):
         """
@@ -118,7 +119,8 @@ class RadiotherapyEnv(gym.Env):
         """
 
         rotation_bounds = np.pi
-        rotation_vector = normalized_rotation * rotation_bounds
+        clipped_rotation = np.clip(normalized_rotation, -1.0, 1.0)
+        rotation_vector = clipped_rotation * rotation_bounds
 
         return rotation_vector
 
@@ -140,9 +142,9 @@ class RadiotherapyEnv(gym.Env):
 
     def overshoot_reward(self, translation_overshoot, rotation_overshoot):
         translation_reward = (
-            -np.sum(translation_overshoot) * self.OVERSHOOT_TRANSLATION_REWARD
+            np.sum(translation_overshoot) * self.OVERSHOOT_TRANSLATION_REWARD
         )
-        rotation_reward = -np.sum(rotation_overshoot) * self.OVERSHOOT_ROTATION_REWARD
+        rotation_reward = np.sum(rotation_overshoot) * self.OVERSHOOT_ROTATION_REWARD
 
         return translation_reward + rotation_reward
 
@@ -150,16 +152,12 @@ class RadiotherapyEnv(gym.Env):
         return beam_on > 0.0
 
     def step(self, action):
+        self.t += 1
+
         normalized_translation = action[:3]
         normalized_rotation = action[3:6]
         is_beam_on = self.map_bool(action[6])
-        done = self.map_bool(action[7])
-
-        if done:
-            self.done = True
-            self.t += 1
-            reward = self.dose_reward()
-            return self.observation(), reward, True, False, {}
+        self.done = self.map_bool(action[7])
 
         translation = self.map_translation(normalized_translation)
         rotation = self.map_rotation(normalized_rotation)
@@ -171,22 +169,30 @@ class RadiotherapyEnv(gym.Env):
             self.beam_direction, rotation, self.MAX_SLOPE
         )
 
-        self.beam_position = new_position
-        self.beam_direction = new_direction
+        if not self.done:
+            self.beam_position = new_position
+            self.beam_direction = new_direction
 
-        if is_beam_on:
-            self.add_beam(self.beam_position, self.beam_direction)
+            if is_beam_on:
+                self.add_beam(self.beam_position, self.beam_direction)
 
         reward = self.dose_reward() + self.overshoot_reward(
             overshoot_translation, overshoot_rotation
         )
 
-        self.t += 1
-
         if self.t >= self.MAX_TIME_STEPS:
             self.done = True
 
-        return self.observation(), reward, self.done, False, {}
+        info = {
+            "episode": {
+                "r": reward,
+                "l": self.t,
+                "tumour_dose": self.tumour_dose_reward(),
+                "lung_dose": self.lungs_dose_reward(),
+            }
+        }
+
+        return self.observation(), reward, self.done, False, info
 
     def observation(self):
         current_beam = beam_voxels(self.lungs, self.beam_position, self.beam_direction)
