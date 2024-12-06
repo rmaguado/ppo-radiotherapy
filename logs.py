@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 
 def setup_tensorboard(cfg, run_name):
-    writer = SummaryWriter(f"{cfg.output_dir}/{run_name}")
+    writer = SummaryWriter(f"{cfg.output_dir}/tensorboard/{run_name}")
     return writer
 
 
