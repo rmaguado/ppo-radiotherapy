@@ -8,9 +8,10 @@ use_wandb: False
 use_tensorboard: True
 
 total_timesteps:  100000
-save_frequency: 10000
+save_timesteps: 10000
+save_model: True
 learning_rate: 3e-4
-num_envs: 1
+num_envs: 2
 num_steps: 2048
 anneal_lr: True
 gamma: 0.99
