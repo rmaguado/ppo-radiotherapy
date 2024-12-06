@@ -16,14 +16,15 @@ class RadiotherapyEnv(gym.Env):
     ACTION_SIZE = 6
     MAX_TIME_STEPS = 100
     MAX_SLOPE = 0.6
-    BEAM_DOSE = 0.05
+    BEAM_DOSE = 0.1
     LUNG_DOSE_THRESHOLD = 0.1
-    LUNG_DOSE_REWARD = -0.1
+    LUNG_DOSE_REWARD = -1.0
     TUMOUR_DOSE_REWARD = 1.0
     OVERSHOOT_TRANSLATION_REWARD = -1.0
     OVERSHOOT_ROTATION_REWARD = -1.0
-    STILL_PENALTY_REWARD = -1.0  # TODO: add penalty for staying still
-    MOVEMENT_THRESHOLD = 0.01
+    STILL_PENALTY_REWARD = -1.0
+    MOVEMENT_THRESHOLD = 0.05
+    ROTATION_THRESHOLD = 0.05
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
@@ -161,7 +162,7 @@ class RadiotherapyEnv(gym.Env):
 
         if (
             translation_magnitude < self.MOVEMENT_THRESHOLD
-            and rotation_magnitude < self.MOVEMENT_THRESHOLD
+            or rotation_magnitude < self.ROTATION_THRESHOLD
         ):
             return self.STILL_PENALTY_REWARD
         return 0.0
