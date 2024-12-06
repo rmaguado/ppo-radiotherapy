@@ -122,7 +122,8 @@ class Agent(nn.Module):
         )
 
     def get_value(self, x):
-        return self.critic(x)
+        features = self.features_extractor(x)
+        return self.critic(features)
 
     def get_action_and_value(self, x, action=None):
         features = self.features_extractor(x)
