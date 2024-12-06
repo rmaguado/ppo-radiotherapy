@@ -26,6 +26,6 @@ if [ ! -z $2 ]; then
   sbatch $OUT/$NAME/$NAME.run
 
 else
-  printf "\nneed NAME GPUTYPE(A40|L40S)\n\n"
+  printf "\nneed NAME CONF GPUTYPE(A40|L40S)\n\n"
 
 fi

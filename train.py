@@ -2,6 +2,7 @@
 Modified from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_continuous_action.py
 """
 
+import os
 import random
 import time
 
@@ -14,6 +15,7 @@ from torch.distributions.normal import Normal
 import wandb
 import argparse
 import omegaconf
+from dotenv import load_dotenv
 
 from environment import RadiotherapyEnv
 
@@ -26,7 +28,7 @@ def get_argparser():
         default="configs/default.yaml",
         help="path to the config file",
     )
-    parser.add_argument("--output_dir", type=str, help="path to the output directory")
+    parser.add_argument("--output-dir", type=str, help="path to the output directory")
     return parser
 
 
@@ -350,8 +352,11 @@ def train(
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    wandb_key = os.environ.get("WANDB_KEY")
     cfg = get_config()
     run_name = f"{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
+    wandb.login(key=wandb_key)
     wandb.init(
         project=cfg.wandb_project_name,
         config=cfg,
