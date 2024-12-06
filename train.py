@@ -10,7 +10,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.distributions.normal import Normal
 import argparse
 import omegaconf
 
@@ -94,7 +93,7 @@ def parse_infos(infos, episode_metrics):
 
 def train(
     cfg,
-    agent: Agent,
+    agent,
     optimizer: optim.Optimizer,
     envs: gym.vector.SyncVectorEnv,
     device: torch.device,
