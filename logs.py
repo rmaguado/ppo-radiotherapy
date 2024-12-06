@@ -70,8 +70,16 @@ def log_training_metrics(
     logger("losses/clipfrac", np.mean(clipfracs), global_step)
     logger("losses/explained_variance", explained_var, global_step)
     logger("charts/SPS", sps, global_step)
+    print(
+        f"Step: {global_step}, SPS: {sps:.2f}, LR: {learning_rate:.2e}, V loss: {v_loss.item():.2f}, PG loss: {pg_loss.item():.2f}, Entropy loss: {entropy_loss.item():.2f}, Old approx KL: {old_approx_kl.item():.2f}, Approx KL: {approx_kl.item():.2f}, Clipfrac: {np.mean(clipfracs):.2f}, Explained variance: {explained_var:.2f}"
+    )
 
 
 def log_episode_metrics(global_step, info, logger):
-    logger("charts/episodic_return", info["episode"]["r"], global_step)
-    logger("charts/episodic_length", info["episode"]["l"], global_step)
+    episodic_return = info["episode"]["r"]
+    episodic_length = info["episode"]["l"]
+    logger("charts/episodic_return", episodic_return, global_step)
+    logger("charts/episodic_length", episodic_length, global_step)
+    print(
+        f"Step: {global_step}, Episodic_Return: {episodic_return:.2f}, Episodic_Length: {episodic_length:.2f}"
+    )
