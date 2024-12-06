@@ -1,7 +1,7 @@
 exp_name: test
 seed: 1
 torch_deterministic: True
-cuda: False
+cuda: True
 track: False
 wandb_project_name: rl-radiotherapy
 use_wandb: False

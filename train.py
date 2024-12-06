@@ -359,6 +359,7 @@ if __name__ == "__main__":
     if cfg.cuda:
         assert torch.cuda.is_available(), "CUDA is not available"
     device = torch.device("cuda" if cfg.cuda else "cpu")
+    print("Using", device)
 
     envs = gym.vector.SyncVectorEnv(
         [make_env(RadiotherapyEnv, cfg.gamma) for i in range(cfg.num_envs)]
