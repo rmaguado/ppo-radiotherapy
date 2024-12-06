@@ -77,6 +77,9 @@ def log_training_metrics(
 
 def log_episode_metrics(global_step, episode_metrics, logger):
     n_completed = episode_metrics["completed"]
+    if n_completed == 0:
+        print(f"Step: {global_step}, Completed: 0")
+        return
     mean_return = np.mean(episode_metrics["returns"])
     mean_length = np.mean(episode_metrics["lengths"])
     lung_reward = np.mean(episode_metrics["lung_dose_rewards"])
