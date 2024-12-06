@@ -71,15 +71,19 @@ def log_training_metrics(
     logger("losses/explained_variance", explained_var, global_step)
     logger("charts/SPS", sps, global_step)
     print(
-        f"Step: {global_step}, SPS: {sps:.2f}, LR: {learning_rate:.2e}, V loss: {v_loss.item():.2f}, PG loss: {pg_loss.item():.2f}, Entropy loss: {entropy_loss.item():.2f}, Old approx KL: {old_approx_kl.item():.2f}, Approx KL: {approx_kl.item():.2f}, Clipfrac: {np.mean(clipfracs):.2f}, Explained variance: {explained_var:.2f}"
+        f"Step: {global_step}, SPS: {sps:.3f}, LR: {learning_rate:.3e}, V loss: {v_loss.item():.3f}, PG loss: {pg_loss.item():.3f}, Entropy loss: {entropy_loss.item():.3f}, Old approx KL: {old_approx_kl.item():.3f}, Approx KL: {approx_kl.item():.3f}, Clipfrac: {np.mean(clipfracs):.3f}, Explained variance: {explained_var:.3f}"
     )
 
 
-def log_episode_metrics(global_step, info, logger):
-    episodic_return = info["episode"]["r"]
-    episodic_length = info["episode"]["l"]
-    logger("charts/episodic_return", episodic_return, global_step)
-    logger("charts/episodic_length", episodic_length, global_step)
+def log_episode_metrics(global_step, episode_metrics, logger):
+    n_completed = episode_metrics["completed"]
+    mean_return = np.mean(episode_metrics["returns"])
+    mean_length = np.mean(episode_metrics["lengths"])
+    lung_reward = np.mean(episode_metrics["lung_dose_rewards"])
+    tumour_reward = np.mean(episode_metrics["tumour_dose_rewards"])
+    overshoot_reward = np.mean(episode_metrics["overshoot_rewards"])
+    logger("charts/mean_return", mean_return, global_step)
+    logger("charts/mean_length", mean_length, global_step)
     print(
-        f"Step: {global_step}, Episodic_Return: {episodic_return:.2f}, Episodic_Length: {episodic_length:.2f}"
+        f"Step: {global_step}, Completed: {n_completed}, Mean_Return: {mean_return:.3f}, Mean_Length: {mean_length:.3f}, Lung_Reward: {lung_reward:.3f}, Tumour_Reward: {tumour_reward:.3f}, Overshoot_Reward: {overshoot_reward:.3f}"
     )

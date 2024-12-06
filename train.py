@@ -149,6 +149,27 @@ def set_seeds(cfg):
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
 
+def parse_infos(infos, episode_metrics):
+    if "episode" not in infos.keys():
+        return
+
+    episode_info = infos["episode"]
+    completed = np.where(episode_info["_l"])[0]
+
+    episode_metrics["completed"] += 1
+    episode_metrics["returns"] += list(episode_info["r"][completed])
+    episode_metrics["lengths"] += list(episode_info["l"][completed])
+
+    reward_components = infos["reward_components"]
+    episode_metrics["lung_dose_rewards"] += list(reward_components["lung"][completed])
+    episode_metrics["tumour_dose_rewards"] += list(
+        reward_components["tumour"][completed]
+    )
+    episode_metrics["overshoot_rewards"] += list(
+        reward_components["overshoot"][completed]
+    )
+
+
 def train(
     cfg,
     agent: Agent,
@@ -181,6 +202,14 @@ def train(
             optimizer.param_groups[0]["lr"] = lrnow
 
         for step in range(0, cfg.num_steps):
+            episode_metrics = {
+                "completed": 0,
+                "returns": [],
+                "lengths": [],
+                "lung_dose_rewards": [],
+                "tumour_dose_rewards": [],
+                "overshoot_rewards": [],
+            }
             global_step += cfg.num_envs
             obs[step] = next_obs
             dones[step] = next_done
@@ -202,10 +231,8 @@ def train(
                 next_done
             ).to(device)
 
-            if "final_info" in infos:
-                for info in infos["final_info"]:
-                    if info and "episode" in info:
-                        log_episode_metrics(global_step, info, logger)
+            parse_infos(infos, episode_metrics)
+        log_episode_metrics(global_step, episode_metrics, logger)
 
         # bootstrap value if not done
         with torch.no_grad():
