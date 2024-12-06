@@ -2,7 +2,6 @@
 Modified from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_continuous_action.py
 """
 
-import os
 import random
 import time
 
@@ -12,11 +11,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.normal import Normal
-import wandb
 import argparse
 import omegaconf
-from dotenv import load_dotenv
 
+from logs import get_logger, log_training_metrics, log_episode_metrics
 from environment import RadiotherapyEnv
 
 
@@ -149,42 +147,6 @@ def set_seeds(cfg):
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
 
-def log_training_metrics(
-    optimizer,
-    global_step,
-    start_time,
-    clipfracs,
-    old_approx_kl,
-    approx_kl,
-    pg_loss,
-    v_loss,
-    entropy_loss,
-    explained_var,
-):
-    def log_metric(name, value):
-        wandb.log({name: value, "global_step": global_step})
-
-    learning_rate = optimizer.param_groups[0]["lr"]
-    sps = int(global_step / (time.time() - start_time))
-    log_metric("charts/learning_rate", learning_rate)
-    log_metric("losses/value_loss", v_loss.item())
-    log_metric("losses/policy_loss", pg_loss.item())
-    log_metric("losses/entropy", entropy_loss.item())
-    log_metric("losses/old_approx_kl", old_approx_kl.item())
-    log_metric("losses/approx_kl", approx_kl.item())
-    log_metric("losses/clipfrac", np.mean(clipfracs))
-    log_metric("losses/explained_variance", explained_var)
-    log_metric("charts/SPS", sps)
-
-
-def log_episode_metrics(global_step, info):
-    def log_metric(name, value):
-        wandb.log({name: value, "global_step": global_step})
-
-    log_metric("charts/episodic_return", info["episode"]["r"])
-    log_metric("charts/episodic_length", info["episode"]["l"])
-
-
 def train(
     cfg,
     agent: Agent,
@@ -241,7 +203,7 @@ def train(
             if "final_info" in infos:
                 for info in infos["final_info"]:
                     if info and "episode" in info:
-                        log_episode_metrics(global_step, info)
+                        log_episode_metrics(global_step, info, logger)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -336,11 +298,12 @@ def train(
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+        sps = int(global_step / (time.time() - start_time))
 
         log_training_metrics(
             optimizer,
             global_step,
-            start_time,
+            sps,
             clipfracs,
             old_approx_kl,
             approx_kl,
@@ -348,22 +311,15 @@ def train(
             v_loss,
             entropy_loss,
             explained_var,
+            logger,
         )
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    wandb_key = os.environ.get("WANDB_KEY")
     cfg = get_config()
     run_name = f"{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
-    wandb.login(key=wandb_key)
-    wandb.init(
-        project=cfg.wandb_project_name,
-        config=cfg,
-        name=run_name,
-        monitor_gym=True,
-        save_code=True,
-    )
+
+    logger = get_logger(cfg, run_name)
 
     set_seeds(cfg)
 

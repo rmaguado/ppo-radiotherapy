@@ -4,6 +4,8 @@ torch_deterministic: True
 cuda: False
 track: False
 wandb_project_name: rl-radiotherapy
+use_wandb: False
+use_tensorboard: True
 
 total_timesteps:  1000000
 learning_rate: 3e-4
