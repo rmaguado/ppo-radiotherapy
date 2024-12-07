@@ -56,7 +56,7 @@ class FeaturesExtractor3D(nn.Module):
 
 
 class PPO(nn.Module):
-    def __init__(self, envs, observation_shape, features_dim, show_summary=False):
+    def __init__(self, envs, observation_shape, features_dim):
         super().__init__()
         self.features_dim = features_dim
         self.observation_shape = observation_shape
@@ -82,8 +82,6 @@ class PPO(nn.Module):
         self.actor_logstd = nn.Parameter(
             torch.zeros(1, self.action_space, dtype=torch.float32)
         )
-        if show_summary:
-            self.summary()
 
     def summary(self):
         print("Observation shape: ", self.observation_shape)
