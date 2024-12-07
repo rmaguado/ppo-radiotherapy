@@ -34,8 +34,6 @@ class FeaturesExtractor3D(nn.Module):
             nn.MaxPool3d(2, 2),
             nn.Conv3d(64, 128, 3),
             nn.ReLU(),
-            nn.Conv3d(128, 128, 3),
-            nn.ReLU(),
             nn.MaxPool3d(2, 2),
             nn.Flatten(),
         )
