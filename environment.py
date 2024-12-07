@@ -15,7 +15,7 @@ from transforms import apply_rotation, apply_translation
 class RadiotherapyEnv(gym.Env):
     ACTION_SIZE = 6
     MAX_TIME_STEPS = 100
-    MAX_SLOPE = 0.6
+    MIN_ANGLE_Z = np.pi / 4
     BEAM_DOSE = 0.1
     LUNG_DOSE_THRESHOLD = 0.1
     LUNG_DOSE_REWARD = -1.0
@@ -62,6 +62,14 @@ class RadiotherapyEnv(gym.Env):
 
         self.max_episode_steps = self.MAX_TIME_STEPS
 
+    def export_trajectory(self, filename):
+        np.savez_compressed(
+            filename,
+            tumours=self.tumours,
+            dose=self.dose,
+            beams=self.beams,
+        )
+
     def reset(self, seed=None, options=None):
         self.reset_tumours()
         self.reset_beam()
@@ -87,8 +95,8 @@ class RadiotherapyEnv(gym.Env):
 
     def reset_beam(self):
         self.beams = []
-        self.beam_position = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-        self.beam_direction = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+        self.beam_position = np.array(self.LUNG_SHAPE) / 2
+        self.beam_direction = np.array([0.0, 1.0, 0.0])
 
     def reset_dose(self):
         self.dose = np.zeros_like(self.lungs, dtype=np.float32)
@@ -162,7 +170,7 @@ class RadiotherapyEnv(gym.Env):
 
         if (
             translation_magnitude < self.MOVEMENT_THRESHOLD
-            or rotation_magnitude < self.ROTATION_THRESHOLD
+            and rotation_magnitude < self.ROTATION_THRESHOLD
         ):
             return self.STILL_PENALTY_REWARD
         return 0.0
@@ -189,7 +197,7 @@ class RadiotherapyEnv(gym.Env):
             self.beam_position, translation, self.TRANSLATION_BOUNDS
         )
         new_direction, overshoot_rotation = apply_rotation(
-            self.beam_direction, rotation, self.MAX_SLOPE
+            self.beam_direction, rotation, self.MIN_ANGLE_Z
         )
 
         self.beam_position = new_position
@@ -214,7 +222,15 @@ class RadiotherapyEnv(gym.Env):
                 "lung": lungs_dose_reward,
                 "overshoot": overshoot_reward,
                 "movement": still_penalty_reward,
-            }
+            },
+            "position": {
+                "translation": new_position,
+                "rotation": new_direction,
+            },
+            "overshoot": {
+                "translation": overshoot_translation,
+                "rotation": overshoot_rotation,
+            },
         }
 
         return self.observation(), reward, self.done, False, info
@@ -258,7 +274,7 @@ class RadiotherapyEnv(gym.Env):
 
     def inspect_observation(self):
         observation = self.observation()
-        view_observation_slices(observation)
+        view_observation_slices(observation, axis=0)
 
     def close(self):
         pass
@@ -273,17 +289,22 @@ def test_check_env():
     env.close()
 
 
-def test_observation_render():
+def human_play():
     env = RadiotherapyEnv()
 
-    env.step(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
-    env.step(np.array([0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
-    env.step(np.array([0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0, 0.0]))
-    env.step(np.array([0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
-    env.step(np.array([0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 1.0, 0.0]))
+    done = False
+    while not done:
+        env.inspect_observation()
 
-    env.inspect_observation()
-    env.render()
+        action_raw = input("Enter action: ")
+        if action_raw == "q":
+            done = True
+        else:
+            action = np.array([float(x) for x in action_raw.split(",")])
+            _, _, _, _, info = env.step(action)
+            print("Info:", info)
+
+    env.export_trajectory("trajectory.npz")
     env.close()
 
 
@@ -295,4 +316,4 @@ def test_observation_shape():
 
 
 if __name__ == "__main__":
-    test_observation_render()
+    human_play()
