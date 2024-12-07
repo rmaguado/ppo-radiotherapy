@@ -219,9 +219,18 @@ class RadiotherapyEnv(gym.Env):
 
         return self.observation(), reward, self.done, False, info
 
-    def observation(self):
+    def get_current_view(self):
         current_beam = beam_voxels(self.lungs, self.beam_position, self.beam_direction)
-        stacked = np.stack([self.lungs, self.tumours, self.dose, current_beam], axis=0)
+        horizontal_beam_center = beam_voxels(
+            self.lungs, self.beam_position, np.array([1.0, 0.0, 0.0])
+        )
+        return current_beam + horizontal_beam_center
+
+    def observation(self):
+        current_beam_view = self.get_current_view()
+        stacked = np.stack(
+            [self.lungs, self.tumours, self.dose, current_beam_view], axis=0
+        )
 
         return np.clip(stacked, 0.0, 1.0)
 
