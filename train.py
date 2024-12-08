@@ -89,6 +89,9 @@ def parse_infos(infos, episode_metrics):
     episode_metrics["movement_rewards"] += list(
         reward_components["movement"][completed]
     )
+    episode_metrics["tumour_distance_rewards"] += list(
+        reward_components["distance_to_tumour"][completed]
+    )
 
 
 def train(
@@ -130,6 +133,7 @@ def train(
             "tumour_dose_rewards": [],
             "overshoot_rewards": [],
             "movement_rewards": [],
+            "tumour_distance_rewards": [],
         }
 
         for step in range(0, cfg.num_steps):

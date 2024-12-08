@@ -86,12 +86,14 @@ def log_episode_metrics(global_step, episode_metrics, logger):
     tumour_reward = np.mean(episode_metrics["tumour_dose_rewards"])
     overshoot_reward = np.mean(episode_metrics["overshoot_rewards"])
     movement_reward = np.mean(episode_metrics["movement_rewards"])
+    tumour_distance_reward = np.mean(episode_metrics["tumour_distance_rewards"])
     logger("charts/mean_return", mean_return, global_step)
     logger("charts/mean_length", mean_length, global_step)
     logger("charts/lung_dose_reward", lung_reward, global_step)
     logger("charts/tumour_dose_reward", tumour_reward, global_step)
     logger("charts/overshoot_reward", overshoot_reward, global_step)
     logger("charts/movement_reward", movement_reward, global_step)
+    logger("charts/tumour_distance_reward", tumour_distance_reward, global_step)
     print(
-        f"Step: {global_step}, Completed: {n_completed}, Mean_Return: {mean_return:.3f}, Mean_Length: {mean_length:.3f}, Lung_Reward: {lung_reward:.3f}, Tumour_Reward: {tumour_reward:.3f}, Overshoot_Reward: {overshoot_reward:.3f}, Movement_Reward: {movement_reward:.3f}"
+        f"Step: {global_step}, Completed: {n_completed}, Mean_Return: {mean_return:.3f}, Mean_Length: {mean_length:.3f}, Lung_Reward: {lung_reward:.3f}, Tumour_Reward: {tumour_reward:.3f}, Overshoot_Reward: {overshoot_reward:.3f}, Movement_Reward: {movement_reward:.3f}, Tumour_Distance_Reward: {tumour_distance_reward:.3f}"
     )
