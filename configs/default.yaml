@@ -11,8 +11,8 @@ total_timesteps:  5000000
 save_timesteps: 500000
 save_model: True
 learning_rate: 3e-4
-num_envs: 8
-num_steps: 256
+num_envs: 16
+num_steps: 100
 anneal_lr: True
 gamma: 0.99
 gae_lambda: 0.95

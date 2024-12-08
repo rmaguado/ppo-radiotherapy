@@ -6,7 +6,7 @@
 #SBATCH --output=$OUT/$NAME/$NAME-%j.out
 #SBATCH --nodes=1
 #SBATCH --nodelist=compute-cuda-02
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=24
 
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:$GPUTYPE:1
