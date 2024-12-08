@@ -39,6 +39,10 @@ def get_config():
     cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
     cfg.save_model_iterations = cfg.save_timesteps // cfg.batch_size
     cfg.output_dir = args.output_dir
+
+    with open(f"{cfg.output_dir}/config.yaml", "w") as f:
+        omegaconf.OmegaConf.save(cfg, f)
+
     return cfg
 
 
