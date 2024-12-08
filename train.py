@@ -74,7 +74,7 @@ def parse_infos(infos, episode_metrics):
     episode_info = infos["episode"]
     completed = np.where(episode_info["_l"])[0]
 
-    episode_metrics["completed"] += 1
+    episode_metrics["completed"] += len(completed)
     episode_metrics["returns"] += list(episode_info["r"][completed])
     episode_metrics["lengths"] += list(episode_info["l"][completed])
 
