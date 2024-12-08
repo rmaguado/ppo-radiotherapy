@@ -234,6 +234,8 @@ def create_scene(
     human_model = load_human_model()
     lungs = load_lungs_model()
 
+    camera_transform = np.load("camera_transform.npy")
+
     lungs_bounds = lungs.bounds
     beam_scaling = (lungs_bounds[1] - lungs_bounds[0]) / np.array(lung_shape)
 
@@ -245,6 +247,7 @@ def create_scene(
         for (position, direction) in beams_data
     ]
     scene = Scene([tumours] + beams + [lungs, human_model])
+    scene.camera_transform = camera_transform
     scene.show(resolution=(800, 600))
 
 
