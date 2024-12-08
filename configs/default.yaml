@@ -7,12 +7,12 @@ wandb_project_name: rl-radiotherapy
 use_wandb: False
 use_tensorboard: True
 
-total_timesteps:  10000000
-save_timesteps: 1000000
+total_timesteps:  5000000
+save_timesteps: 500000
 save_model: True
 learning_rate: 3e-4
-num_envs: 2
-num_steps: 2048
+num_envs: 8
+num_steps: 256
 anneal_lr: True
 gamma: 0.99
 gae_lambda: 0.95
