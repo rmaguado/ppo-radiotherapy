@@ -17,11 +17,12 @@ class RadiotherapyEnv(gym.Env):
     MAX_TIME_STEPS = 100
     MIN_ANGLE_Z = np.pi / 4
     BEAM_DOSE = 0.1
-    LUNG_DOSE_THRESHOLD = 0.1
+    LUNG_DOSE_THRESHOLD = 0.2
     LUNG_DOSE_REWARD = -1.0
     TUMOUR_DOSE_REWARD = 1.0
     OVERSHOOT_TRANSLATION_REWARD = -1.0
     OVERSHOOT_ROTATION_REWARD = -1.0
+    DISTANCE_TO_TUMOUR_REWARD = -1.0
     STILL_PENALTY_REWARD = -1.0
     MOVEMENT_THRESHOLD = 0.05
     ROTATION_THRESHOLD = 0.05
@@ -82,7 +83,7 @@ class RadiotherapyEnv(gym.Env):
     def reset_tumours(self):
         self.tumours = np.zeros_like(self.lungs, dtype=np.float32)
 
-        n_tumours = np.random.randint(1, 3)
+        n_tumours = 1
         for _ in range(n_tumours):
             tumour_filename = np.random.choice(self.TUMOUR_DIRS)
             tumour_attrs = tumour_filename.split(".npy")[0].split("_")
@@ -136,6 +137,17 @@ class RadiotherapyEnv(gym.Env):
 
         return rotation_vector
 
+    def distance_to_tumour(self):
+        tumour = np.stack(np.where(self.tumours == 1.0), axis=-1)
+        beam_position = np.array(self.beam_position)
+        distances = np.linalg.norm(tumour - beam_position, axis=1)
+        return np.min(distances)
+
+    def distance_to_tumour_reward(self):
+        distance = self.distance_to_tumour()
+        relative_distance = distance / np.max(self.LUNG_SHAPE)
+        return relative_distance * self.DISTANCE_TO_TUMOUR_REWARD
+
     def tumour_dose_reward(self):
         tumour_dose = self.dose * self.tumours
         total_tumour_dose = np.sum(tumour_dose)
@@ -149,10 +161,10 @@ class RadiotherapyEnv(gym.Env):
         lungs_mask = self.lungs * (1 - self.tumours)
         lungs_dose = self.dose * lungs_mask
         threshold_mask = lungs_dose > self.LUNG_DOSE_THRESHOLD
-        above_threshold_dose = np.sum(threshold_mask * lungs_dose)
+        above_threshold_count = np.sum(threshold_mask)
         total_lung = np.sum(lungs_mask)
 
-        lung_dose_reward = above_threshold_dose / total_lung * self.LUNG_DOSE_REWARD
+        lung_dose_reward = above_threshold_count / total_lung * self.LUNG_DOSE_REWARD
 
         return lung_dose_reward
 
@@ -211,8 +223,15 @@ class RadiotherapyEnv(gym.Env):
             overshoot_translation, overshoot_rotation
         )
         still_penalty_reward = self.still_penalty_reward(translation, rotation)
+        distance_to_tumour_reward = self.distance_to_tumour_reward()
 
-        reward = tumour_dose_reward + lungs_dose_reward + overshoot_reward
+        reward = (
+            tumour_dose_reward
+            + lungs_dose_reward
+            + overshoot_reward
+            + still_penalty_reward
+            + distance_to_tumour_reward
+        )
 
         self.done = self.is_fully_irradiated() or self.t >= self.MAX_TIME_STEPS
 
@@ -222,13 +241,18 @@ class RadiotherapyEnv(gym.Env):
                 "lung": lungs_dose_reward,
                 "overshoot": overshoot_reward,
                 "movement": still_penalty_reward,
+                "distance_to_tumour": distance_to_tumour_reward,
             },
-            "position": {
-                "translation": new_position,
-                "rotation": new_direction,
+            "beam_position": {
+                "translation": list(new_position),
+                "rotation": list(new_direction),
+            },
+            "doses": {
+                "tumour": float(np.sum(self.dose * self.tumours)),
+                "lung": float(np.sum(self.dose * self.lungs)),
             },
             "overshoot": {
-                "translation": overshoot_translation,
+                "translation": list(overshoot_translation),
                 "rotation": overshoot_rotation,
             },
         }
@@ -292,9 +316,13 @@ def test_check_env():
 def human_play():
     env = RadiotherapyEnv()
 
+    print("Total tumour volume:", np.sum(env.tumours))
+    print("Total lung volume:", np.sum(env.lungs))
+
     done = False
     while not done:
-        env.inspect_observation()
+        # env.inspect_observation()
+        env.render()
 
         action_raw = input("Enter action: ")
         if action_raw == "q":
@@ -302,7 +330,8 @@ def human_play():
         else:
             action = np.array([float(x) for x in action_raw.split(",")])
             _, _, _, _, info = env.step(action)
-            print("Info:", info)
+            print("Info:")
+            print(info)
 
     env.export_trajectory("trajectory.npz")
     env.close()
