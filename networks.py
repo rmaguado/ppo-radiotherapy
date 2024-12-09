@@ -39,7 +39,7 @@ class FeaturesExtractor3D(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(n_flatten, features_dim * 4),
             nn.ReLU(),
-            nn.Linear(features_dim, features_dim),
+            nn.Linear(features_dim * 4, features_dim),
             nn.ReLU(),
         )
 
