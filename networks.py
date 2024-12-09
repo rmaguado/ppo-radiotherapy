@@ -20,13 +20,13 @@ class FeaturesExtractor3D(nn.Module):
         )
 
         self.cnn = nn.Sequential(
-            nn.Conv3d(n_input_channels, 32, 3),
+            nn.Conv3d(n_input_channels, 16, 3),
             nn.ReLU(),
             nn.MaxPool3d(2, 2, padding=first_pool_padding),
-            nn.Conv3d(32, 32, 3, groups=4),
+            nn.Conv3d(16, 16, 3, groups=2),
             nn.ReLU(),
             nn.MaxPool3d(2, 2),
-            nn.Conv3d(32, 32, 3, groups=4),
+            nn.Conv3d(16, 16, 3, groups=4),
             nn.ReLU(),
             nn.MaxPool3d(2, 2),
             nn.Flatten(),
@@ -38,8 +38,6 @@ class FeaturesExtractor3D(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Linear(n_flatten, features_dim),
-            nn.ReLU(),
-            nn.Linear(features_dim, features_dim),
             nn.ReLU(),
         )
 
