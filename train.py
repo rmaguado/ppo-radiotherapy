@@ -49,6 +49,22 @@ def log_episode_statistics(writer, global_step, infos):
     writer.add_scalar("charts/episodic_return", mean_returns, global_step)
     writer.add_scalar("charts/episodic_length", mean_lengths, global_step)
 
+    episode_rewards = episode_info["reward_components"]
+    tumour_reward = episode_rewards["tumour"]
+    lung_reward = episode_rewards["lung"]
+    distance_reward = episode_rewards["distance_to_tumour"]
+    total_reward = episode_rewards["total"]
+    mean_tumour_reward = np.mean(tumour_reward[ep_completions])
+    mean_lung_reward = np.mean(lung_reward[ep_completions])
+    mean_distance_reward = np.mean(distance_reward[ep_completions])
+    mean_total_reward = np.mean(total_reward[ep_completions])
+    writer.add_scalar("charts/episodic_tumour_reward", mean_tumour_reward, global_step)
+    writer.add_scalar("charts/episodic_lung_reward", mean_lung_reward, global_step)
+    writer.add_scalar(
+        "charts/episodic_distance_reward", mean_distance_reward, global_step
+    )
+    writer.add_scalar("charts/episodic_total_reward", mean_total_reward, global_step)
+
 
 def log_training_metrics(
     writer,

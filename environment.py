@@ -220,6 +220,7 @@ class RadiotherapyEnv(gym.Env):
 
         info = {
             "reward_components": {
+                "total": reward,
                 "tumour": tumour_dose_reward,
                 "lung": lungs_dose_reward,
                 "distance_to_tumour": distance_to_tumour_reward,
