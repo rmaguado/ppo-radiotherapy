@@ -101,6 +101,7 @@ def train(cfg, writer, device):
         agent = PPO(envs, cfg.feature_dim).to(device)
     else:
         agent = PPO_3DCNN(envs, cfg.feature_dim).to(device)
+        agent.summary()
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
