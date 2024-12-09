@@ -162,6 +162,9 @@ def train(
             ).to(device)
 
             parse_infos(infos, episode_metrics)
+            if iteration % 10000 == 0:
+                print(action, reward)
+                print(infos)
 
         log_episode_metrics(global_step, episode_metrics, logger)
 
