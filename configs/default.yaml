@@ -26,6 +26,8 @@ vf_coef: 0.5
 max_grad_norm: 0.5
 target_kl: None
 
+visionless: True
+
 batch_size: 0
 minibatch_size: 0
 num_iterations: 0

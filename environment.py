@@ -24,19 +24,19 @@ class RadiotherapyEnv(gym.Env):
     OVERSHOOT_ROTATION_REWARD = -1.0
     DISTANCE_TO_TUMOUR_REWARD = -1.0
     STILL_PENALTY_REWARD = -1.0
-    MOVEMENT_THRESHOLD = 0.05
-    ROTATION_THRESHOLD = 0.05
+    MOVEMENT_THRESHOLD = 0.5
+    ROTATION_THRESHOLD = np.pi / 8
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
     LUNG_SHAPE = np.array(LUNGS_ARRAY.shape)
-    TRANSLATION_BOUNDS = LUNG_SHAPE - 1
-    OBSERVATION_SHAPE = (4, LUNG_SHAPE[0], LUNG_SHAPE[1], LUNG_SHAPE[2])
 
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self):
+    def __init__(self, visionless=False):
         super().__init__()
+
+        self.visionless = visionless
 
         self.lungs = np.copy(self.LUNGS_ARRAY)
         self.tumours = None
@@ -53,8 +53,13 @@ class RadiotherapyEnv(gym.Env):
 
         self.reset()
 
+        if self.visionless:
+            self.observation_shape = (12,)
+        else:
+            self.observation_shape = (4, *self.LUNG_SHAPE)
+
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=self.OBSERVATION_SHAPE, dtype=np.float32
+            low=0.0, high=1.0, shape=self.observation_shape, dtype=np.float32
         )
 
         self.action_space = spaces.Box(
@@ -72,7 +77,7 @@ class RadiotherapyEnv(gym.Env):
         )
 
     def reset(self, seed=None, options=None):
-        self.reset_tumours()
+        self.reset_tumour()
         self.reset_beam()
         self.reset_dose()
         self.t = 0
@@ -80,18 +85,16 @@ class RadiotherapyEnv(gym.Env):
 
         return self.observation(), {}
 
-    def reset_tumours(self):
+    def reset_tumour(self):
         self.tumours = np.zeros_like(self.lungs, dtype=np.float32)
 
-        n_tumours = 1
-        for _ in range(n_tumours):
-            tumour_filename = np.random.choice(self.TUMOUR_DIRS)
-            tumour_attrs = tumour_filename.split(".npy")[0].split("_")
-            tumour_position = np.array(tumour_attrs[:3], dtype=np.float32)
-            tumour_radius = float(tumour_attrs[3])
-            tumour_path = f"./data/tumours/{tumour_filename}"
-            self.tumours += np.load(tumour_path).astype(np.float32)
-            self.tumours_meta.append((tumour_position, tumour_radius))
+        tumour_filename = np.random.choice(self.TUMOUR_DIRS)
+        tumour_attrs = tumour_filename.split(".npy")[0].split("_")
+        tumour_position = np.array(tumour_attrs[:3], dtype=np.float32)
+        tumour_radius = float(tumour_attrs[3])
+        tumour_path = f"./data/tumours/{tumour_filename}"
+        self.tumours += np.load(tumour_path).astype(np.float32)
+        self.tumours_meta.append((tumour_position, tumour_radius))
         self.tumours = np.clip(self.tumours, 0.0, 1.0)
 
     def reset_beam(self):
@@ -118,7 +121,7 @@ class RadiotherapyEnv(gym.Env):
             np.ndarray: The translation vector. Range is [0, shape - 1].
         """
         clipped_translation = np.clip(normalized_translation, -1.0, 1.0)
-        return clipped_translation * self.TRANSLATION_BOUNDS
+        return clipped_translation * self.LUNG_SHAPE
 
     def map_rotation(self, normalized_rotation):
         """
@@ -137,15 +140,23 @@ class RadiotherapyEnv(gym.Env):
 
         return rotation_vector
 
+    def tumour_position(self):
+        tumour_mask = np.stack(np.where(self.tumours == 1.0), axis=-1)
+        tumour_position = np.mean(tumour_mask, axis=0)
+        return tumour_position
+
     def distance_to_tumour(self):
         tumour = np.stack(np.where(self.tumours == 1.0), axis=-1)
         beam_position = np.array(self.beam_position)
-        distances = np.linalg.norm(tumour - beam_position, axis=1)
-        return np.min(distances)
+        distances = tumour - beam_position
+        norm_distances = np.linalg.norm(distances, axis=1)
+        min_distance_index = np.argmin(norm_distances)
+        return distances[min_distance_index]
 
     def distance_to_tumour_reward(self):
         distance = self.distance_to_tumour()
-        relative_distance = distance / np.max(self.LUNG_SHAPE)
+        distance_norm = np.linalg.norm(distance)
+        relative_distance = distance_norm / np.max(self.LUNG_SHAPE)
         return relative_distance * self.DISTANCE_TO_TUMOUR_REWARD
 
     def tumour_dose_reward(self):
@@ -170,9 +181,11 @@ class RadiotherapyEnv(gym.Env):
 
     def overshoot_reward(self, translation_overshoot, rotation_overshoot):
         translation_reward = (
-            np.sum(translation_overshoot) * self.OVERSHOOT_TRANSLATION_REWARD
+            np.linalg.norm(translation_overshoot)
+            / np.linalg.norm(self.LUNG_SHAPE)
+            * self.OVERSHOOT_TRANSLATION_REWARD
         )
-        rotation_reward = np.sum(rotation_overshoot) * self.OVERSHOOT_ROTATION_REWARD
+        rotation_reward = rotation_overshoot / np.pi * self.OVERSHOOT_ROTATION_REWARD
 
         return translation_reward + rotation_reward
 
@@ -206,7 +219,7 @@ class RadiotherapyEnv(gym.Env):
         rotation = self.map_rotation(normalized_rotation)
 
         new_position, overshoot_translation = apply_translation(
-            self.beam_position, translation, self.TRANSLATION_BOUNDS
+            self.beam_position, translation, self.LUNG_SHAPE
         )
         new_direction, overshoot_rotation = apply_rotation(
             self.beam_direction, rotation, self.MIN_ANGLE_Z
@@ -266,13 +279,29 @@ class RadiotherapyEnv(gym.Env):
         )
         return current_beam + horizontal_beam_center
 
-    def observation(self):
+    def get_volumes(self):
         current_beam_view = self.get_current_view()
         stacked = np.stack(
             [self.lungs, self.tumours, self.dose, current_beam_view], axis=0
         )
-
         return np.clip(stacked, 0.0, 1.0)
+
+    def get_vector_observation(self):
+        tumour_position = self.tumour_position()
+        distance_to_tumour = self.distance_to_tumour()
+        return np.concatenate(
+            [
+                self.beam_position,
+                self.beam_direction,
+                tumour_position,
+                distance_to_tumour,
+            ]
+        )
+
+    def observation(self):
+        if self.visionless:
+            return self.get_vector_observation()
+        return self.get_volumes()
 
     def export_animation(self):
         from graphics import create_animation
@@ -296,9 +325,9 @@ class RadiotherapyEnv(gym.Env):
             self.LUNG_SHAPE,
         )
 
-    def inspect_observation(self):
-        observation = self.observation()
-        view_observation_slices(observation, axis=0)
+    def inspect_volumes(self):
+        volumes = self.get_volumes()
+        view_observation_slices(volumes, axis=0)
 
     def close(self):
         pass
@@ -314,24 +343,25 @@ def test_check_env():
 
 
 def human_play():
-    env = RadiotherapyEnv()
+    env = RadiotherapyEnv(visionless=True)
 
     print("Total tumour volume:", np.sum(env.tumours))
     print("Total lung volume:", np.sum(env.lungs))
 
     done = False
     while not done:
-        # env.inspect_observation()
-        env.render()
+        env.inspect_volumes()
+        # env.render()
 
         action_raw = input("Enter action: ")
         if action_raw == "q":
             done = True
         else:
             action = np.array([float(x) for x in action_raw.split(",")])
-            _, _, _, _, info = env.step(action)
+            obs, _, _, _, info = env.step(action)
             print("Info:")
             print(info)
+            print(obs)
 
     env.export_trajectory("trajectory.npz")
     env.close()

@@ -53,13 +53,36 @@ class FeaturesExtractor3D(nn.Module):
         return self.mlp(self.cnn(observations))
 
 
+class FeaturesExtractor1D(nn.Module):
+    def __init__(self, observation_shape, features_dim):
+        super().__init__()
+        assert len(observation_shape) == 1
+        self.observation_shape = observation_shape
+        self.mlp = nn.Sequential(
+            layer_init(nn.Linear(np.prod(observation_shape), features_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(features_dim, features_dim)),
+            nn.ReLU(),
+        )
+
+    def forward(self, observations: torch.Tensor) -> torch.Tensor:
+        return self.mlp(observations)
+
+
 class PPO(nn.Module):
-    def __init__(self, envs, observation_shape, features_dim):
+    def __init__(self, envs, features_dim, visionless=False):
         super().__init__()
         self.features_dim = features_dim
-        self.observation_shape = observation_shape
         self.action_space = np.prod(envs.single_action_space.shape)
-        self.features_extractor = FeaturesExtractor3D(observation_shape, features_dim)
+        self.observation_shape = envs.single_observation_space.shape
+        if visionless:
+            self.features_extractor = FeaturesExtractor1D(
+                self.observation_shape, features_dim
+            )
+        else:
+            self.features_extractor = FeaturesExtractor3D(
+                self.observation_shape, features_dim
+            )
         self.critic = nn.Sequential(
             layer_init(nn.Linear(features_dim, 64)),
             nn.Tanh(),
@@ -87,12 +110,22 @@ class PPO(nn.Module):
         print("Features dim: ", self.features_dim)
         print("Features extractor: ")
         summary(self.features_extractor, self.observation_shape)
+        print("Critic: ")
+        summary(self.critic, (self.features_dim,))
+        print("Actor: ")
+        summary(self.actor_mean, (self.features_dim,))
 
     def get_value(self, x):
         features = self.features_extractor(x)
         return self.critic(features)
 
     def get_action_and_value(self, x, action=None):
+        # check if feature extractor params have nans
+        for param in self.features_extractor.parameters():
+            if torch.isnan(param).any():
+                print("features extractor has nans")
+                print(param)
+
         features = self.features_extractor(x)
         action_mean = self.actor_mean(features)
         action_logstd = self.actor_logstd.expand_as(action_mean)

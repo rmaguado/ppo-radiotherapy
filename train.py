@@ -46,9 +46,12 @@ def get_config():
     return cfg
 
 
-def make_env(Env, gamma):
+def make_env(cfg):
+    gamma = cfg.gamma
+    visionless = cfg.visionless
+
     def thunk():
-        env = Env()
+        env = RadiotherapyEnv(visionless=visionless)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
@@ -219,9 +222,10 @@ def train(
 
                 mb_advantages = b_advantages[mb_inds]
                 if cfg.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                        mb_advantages.std() + 1e-8
-                    )
+                    if mb_advantages.numel() > 1:
+                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (
+                            mb_advantages.std(unbiased=False) + 1e-8
+                        )
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
@@ -293,14 +297,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if cfg.cuda else "cpu")
     print("Using", device)
 
-    envs = gym.vector.SyncVectorEnv(
-        [make_env(RadiotherapyEnv, cfg.gamma) for i in range(cfg.num_envs)]
-    )
+    envs = gym.vector.SyncVectorEnv([make_env(cfg) for i in range(cfg.num_envs)])
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
 
-    agent = PPO(envs, RadiotherapyEnv.OBSERVATION_SHAPE, features_dim=1024).to(device)
+    agent = PPO(envs, features_dim=256, visionless=cfg.visionless).to(device)
     agent.summary()
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
