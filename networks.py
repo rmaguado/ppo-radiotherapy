@@ -90,8 +90,8 @@ class PPO(nn.Module):
                 std=0.01,
             )
         )
-        self.actor_logstd = nn.Sequential(
-            nn.Parameter(torch.zeros(1, self.action_space, dtype=torch.float32))
+        self.actor_logstd = nn.Parameter(
+            torch.zeros(1, self.action_space, dtype=torch.float32)
         )
 
     def summary(self):
