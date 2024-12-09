@@ -29,7 +29,7 @@ def get_argparser():
     return parser
 
 
-def make_env(visionless=False):
+def make_env(visionless):
     def thunk():
         env = RadiotherapyEnv(visionless=visionless)
         # env = gym.wrappers.FlattenObservation(env)
