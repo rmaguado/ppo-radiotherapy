@@ -49,7 +49,7 @@ def log_episode_statistics(writer, global_step, infos):
     writer.add_scalar("charts/episodic_return", mean_returns, global_step)
     writer.add_scalar("charts/episodic_length", mean_lengths, global_step)
 
-    episode_rewards = episode_info["reward_components"]
+    episode_rewards = infos["reward_components"]
     tumour_reward = episode_rewards["tumour"]
     lung_reward = episode_rewards["lung"]
     distance_reward = episode_rewards["distance_to_tumour"]
