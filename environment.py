@@ -287,14 +287,15 @@ class RadiotherapyEnv(gym.Env):
         return np.clip(stacked, 0.0, 1.0)
 
     def get_vector_observation(self):
-        tumour_position = self.tumour_position()
-        distance_to_tumour = self.distance_to_tumour()
+        norm_beam_position = self.beam_position / self.LUNG_SHAPE
+        norm_tumour_position = self.tumour_position() / self.LUNG_SHAPE
+        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE
         return np.concatenate(
             [
-                self.beam_position,
+                norm_beam_position,
                 self.beam_direction,
-                tumour_position,
-                distance_to_tumour,
+                norm_tumour_position,
+                norm_distance_to_tumour,
             ]
         )
 
