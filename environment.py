@@ -52,7 +52,7 @@ class RadiotherapyEnv(gym.Env):
         self.reset()
 
         if self.visionless:
-            self.observation_shape = (12,)
+            self.observation_shape = (9,)
         else:
             self.observation_shape = (4, *self.LUNG_SHAPE)
 
