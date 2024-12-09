@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from environment import RadiotherapyEnv
 from ppo_eval import evaluate
-from networks import PPO
+from networks import PPO, PPO_3DCNN
 
 
 def get_argparser():
@@ -29,10 +29,10 @@ def get_argparser():
     return parser
 
 
-def make_env():
+def make_env(visionless=False):
     def thunk():
-        env = RadiotherapyEnv(visionless=True)
-        env = gym.wrappers.FlattenObservation(env)
+        env = RadiotherapyEnv(visionless=visionless)
+        # env = gym.wrappers.FlattenObservation(env)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         return env
 
@@ -90,12 +90,17 @@ def log_training_metrics(
 
 def train(cfg, writer, device):
     # env setup
-    envs = gym.vector.SyncVectorEnv([make_env() for i in range(cfg.num_envs)])
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(visionless=cfg.visionless) for i in range(cfg.num_envs)]
+    )
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
 
-    agent = PPO(envs, cfg.feature_dim).to(device)
+    if cfg.visionless:
+        agent = PPO(envs, cfg.feature_dim).to(device)
+    else:
+        agent = PPO_3DCNN(envs, cfg.feature_dim).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -305,7 +310,7 @@ if __name__ == "__main__":
         print(f"model saved to {model_path}")
 
         episodic_returns = evaluate(
-            gym.vector.SyncVectorEnv([make_env()]),
+            gym.vector.SyncVectorEnv([make_env(visionless=cfg.visionless)]),
             cfg.feature_dim,
             model_path=model_path,
             eval_episodes=10,

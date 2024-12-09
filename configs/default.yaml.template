@@ -28,6 +28,9 @@ max_grad_norm: 0.5
 # agent
 feature_dim: 64
 
+# environment
+visionless: True
+
 # to be filled in runtime
 batch_size: 0
 minibatch_size: 0
