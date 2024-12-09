@@ -19,7 +19,7 @@ class RadiotherapyEnv(gym.Env):
     BEAM_DOSE = 0.1
     LUNG_DOSE_THRESHOLD = 0.2
     LUNG_DOSE_REWARD = 0.0
-    TUMOUR_DOSE_REWARD = 10.0
+    TUMOUR_DOSE_REWARD = 0.0
     OVERSHOOT_TRANSLATION_REWARD = 0.0
     OVERSHOOT_ROTATION_REWARD = 0.0
     DISTANCE_TO_TUMOUR_REWARD = -1.0
@@ -287,9 +287,9 @@ class RadiotherapyEnv(gym.Env):
         return np.clip(stacked, 0.0, 1.0)
 
     def get_vector_observation(self):
-        norm_beam_position = self.beam_position / self.LUNG_SHAPE
-        norm_tumour_position = self.tumour_position() / self.LUNG_SHAPE
-        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE
+        norm_beam_position = self.beam_position / self.LUNG_SHAPE * 2 - 1
+        norm_tumour_position = self.tumour_position() / self.LUNG_SHAPE * 2 - 1
+        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE * 2 - 1
         return np.concatenate(
             [
                 norm_beam_position,
