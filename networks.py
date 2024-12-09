@@ -56,6 +56,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class PPO_3DCNN(nn.Module):
     def __init__(self, envs, feature_dim=64):
         super().__init__()
+        self.feature_dim = feature_dim
         self.observation_shape = envs.single_observation_space.shape
         self.action_space = envs.single_action_space.shape
         self.features_extractor = FeaturesExtractor3D(
@@ -102,7 +103,7 @@ class PPO_3DCNN(nn.Module):
     def summary(self):
         print("Observation shape: ", self.observation_shape)
         print("Action space: ", self.action_space)
-        print("Features dim: ", self.features_dim)
+        print("Feature dim: ", self.feature_dim)
         print("Features extractor: ")
         summary(self.features_extractor, self.observation_shape)
 
