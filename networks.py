@@ -83,13 +83,15 @@ class PPO(nn.Module):
             self.features_extractor = FeaturesExtractor3D(
                 self.observation_shape, features_dim
             )
-        self.critic = layer_init(nn.Linear(features_dim, 1), std=1.0)
-        self.actor_mean = layer_init(
-            nn.Linear(features_dim, self.action_space),
-            std=0.01,
+        self.critic = nn.Sequential(layer_init(nn.Linear(features_dim, 1), std=1.0))
+        self.actor_mean = nn.Sequential(
+            layer_init(
+                nn.Linear(features_dim, self.action_space),
+                std=0.01,
+            )
         )
-        self.actor_logstd = nn.Parameter(
-            torch.zeros(1, self.action_space, dtype=torch.float32)
+        self.actor_logstd = nn.Sequential(
+            nn.Parameter(torch.zeros(1, self.action_space, dtype=torch.float32))
         )
 
     def summary(self):
