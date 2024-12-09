@@ -1,109 +1,88 @@
-"""
-Modified from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_continuous_action.py
-"""
-
+import os
 import random
 import time
+import omegaconf
+import argparse
 
+from tqdm import tqdm
 import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import argparse
-import omegaconf
+from torch.utils.tensorboard import SummaryWriter
 
-from logs import get_logger, log_training_metrics, log_episode_metrics
 from environment import RadiotherapyEnv
+from ppo_eval import evaluate
 from networks import PPO
 
 
 def get_argparser():
-    parser = argparse.ArgumentParser(description="PPO agent", add_help=True)
+    parser = argparse.ArgumentParser(description="Test PPO", add_help=True)
     parser.add_argument(
         "--config-file",
         type=str,
-        default="configs/default.yaml",
+        default="config.yaml",
         help="path to the config file",
     )
     parser.add_argument("--output-dir", type=str, help="path to the output directory")
     return parser
 
 
-def get_config():
-    parser = get_argparser()
-    args = parser.parse_args()
-    cfg = omegaconf.OmegaConf.load(args.config_file)
-    cfg.batch_size = int(cfg.num_envs * cfg.num_steps)
-    cfg.minibatch_size = int(cfg.batch_size // cfg.num_minibatches)
-    cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
-    cfg.save_model_iterations = cfg.save_timesteps // cfg.batch_size
-    cfg.output_dir = args.output_dir
-
-    with open(f"{cfg.output_dir}/config.yaml", "w") as f:
-        omegaconf.OmegaConf.save(cfg, f)
-
-    return cfg
-
-
-def make_env(cfg):
-    gamma = cfg.gamma
-    visionless = cfg.visionless
-
+def make_env():
     def thunk():
-        env = RadiotherapyEnv(visionless=visionless)
+        env = RadiotherapyEnv(visionless=True)
+        env = gym.wrappers.FlattenObservation(env)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        # env = gym.wrappers.ClipAction(env)
-        # env = gym.wrappers.NormalizeObservation(env)
-        # env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=env.observation_space)
-        # env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-        # env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 
     return thunk
 
 
-def set_seeds(cfg):
-    random.seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    torch.manual_seed(cfg.seed)
-    torch.backends.cudnn.deterministic = cfg.torch_deterministic
-
-
-def parse_infos(infos, episode_metrics):
-    if "episode" not in infos.keys():
-        return
-
+def log_episode_statistics(writer, global_step, infos):
     episode_info = infos["episode"]
-    completed = np.where(episode_info["_l"])[0]
-
-    episode_metrics["completed"] += len(completed)
-    episode_metrics["returns"] += list(episode_info["r"][completed])
-    episode_metrics["lengths"] += list(episode_info["l"][completed])
-
-    reward_components = infos["reward_components"]
-    episode_metrics["lung_dose_rewards"] += list(reward_components["lung"][completed])
-    episode_metrics["tumour_dose_rewards"] += list(
-        reward_components["tumour"][completed]
-    )
-    episode_metrics["overshoot_rewards"] += list(
-        reward_components["overshoot"][completed]
-    )
-    episode_metrics["movement_rewards"] += list(
-        reward_components["movement"][completed]
-    )
-    episode_metrics["tumour_distance_rewards"] += list(
-        reward_components["distance_to_tumour"][completed]
-    )
+    ep_returns = episode_info["r"]
+    ep_lengths = episode_info["l"]
+    ep_completions = episode_info["_r"]
+    mean_returns = np.mean(ep_returns[ep_completions])
+    mean_lengths = np.mean(ep_lengths[ep_completions])
+    writer.add_scalar("charts/episodic_return", mean_returns, global_step)
+    writer.add_scalar("charts/episodic_length", mean_lengths, global_step)
 
 
-def train(
-    cfg,
-    agent,
-    optimizer: optim.Optimizer,
-    envs: gym.vector.SyncVectorEnv,
-    device: torch.device,
+def log_training_metrics(
+    writer,
+    global_step,
+    clipfracs,
+    old_approx_kl,
+    approx_kl,
+    pg_loss,
+    v_loss,
+    entropy_loss,
+    explained_var,
+    lr,
 ):
+    writer.add_scalar("charts/learning_rate", lr, global_step)
+    writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+    writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+    writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+    writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+    writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+    writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+    writer.add_scalar("losses/explained_variance", explained_var, global_step)
+
+
+def train(cfg, writer, device):
+    # env setup
+    envs = gym.vector.SyncVectorEnv([make_env() for i in range(cfg.num_envs)])
+    assert isinstance(
+        envs.single_action_space, gym.spaces.Box
+    ), "only continuous action space is supported"
+
+    agent = PPO(envs, cfg.feature_dim).to(device)
+    optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
+
+    # ALGO Logic: Storage setup
     obs = torch.zeros(
         (cfg.num_steps, cfg.num_envs) + envs.single_observation_space.shape
     ).to(device)
@@ -115,29 +94,22 @@ def train(
     dones = torch.zeros((cfg.num_steps, cfg.num_envs)).to(device)
     values = torch.zeros((cfg.num_steps, cfg.num_envs)).to(device)
 
-    # TRY NOT TO MODIFY
+    # TRY NOT TO MODIFY: start the game
     global_step = 0
-    start_time = time.time()
     next_obs, _ = envs.reset(seed=cfg.seed)
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(cfg.num_envs).to(device)
 
-    for iteration in range(1, cfg.num_iterations + 1):
+    iterator = range(1, cfg.num_iterations + 1)
+    if cfg.use_tqdm:
+        iterator = tqdm(iterator)
+
+    for iteration in iterator:
+        # Annealing the rate if instructed to do so.
         if cfg.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / cfg.num_iterations
             lrnow = frac * cfg.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
-
-        episode_metrics = {
-            "completed": 0,
-            "returns": [],
-            "lengths": [],
-            "lung_dose_rewards": [],
-            "tumour_dose_rewards": [],
-            "overshoot_rewards": [],
-            "movement_rewards": [],
-            "tumour_distance_rewards": [],
-        }
 
         for step in range(0, cfg.num_steps):
             global_step += cfg.num_envs
@@ -161,12 +133,8 @@ def train(
                 next_done
             ).to(device)
 
-            parse_infos(infos, episode_metrics)
-            if iteration % 10000 == 0:
-                print(action, reward)
-                print(infos)
-
-        log_episode_metrics(global_step, episode_metrics, logger)
+            if "episode" in infos.keys():
+                log_episode_statistics(writer, global_step, infos)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -221,10 +189,9 @@ def train(
 
                 mb_advantages = b_advantages[mb_inds]
                 if cfg.norm_adv:
-                    if mb_advantages.numel() > 1:
-                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                            mb_advantages.std(unbiased=False) + 1e-8
-                        )
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
+                        mb_advantages.std() + 1e-8
+                    )
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
@@ -256,18 +223,16 @@ def train(
                 nn.utils.clip_grad_norm_(agent.parameters(), cfg.max_grad_norm)
                 optimizer.step()
 
-            if cfg.target_kl != "None" and approx_kl > cfg.target_kl:
-                break
-
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-        sps = int(global_step / (time.time() - start_time))
 
+        lr = optimizer.param_groups[0]["lr"]
+
+        # TRY NOT TO MODIFY: record rewards for plotting purposes
         log_training_metrics(
-            optimizer,
+            writer,
             global_step,
-            sps,
             clipfracs,
             old_approx_kl,
             approx_kl,
@@ -275,37 +240,63 @@ def train(
             v_loss,
             entropy_loss,
             explained_var,
-            logger,
+            lr,
         )
 
-        if cfg.save_model and iteration % cfg.save_model_iterations == 0:
-            model_path = f"{cfg.output_dir}/{run_name}_{iteration}.model"
-            torch.save(agent.state_dict(), model_path)
-            envs.export_trajectory(f"{cfg.output_dir}/trace_{run_name}_{iteration}.npz")
+    envs.close()
+    return agent
 
 
 if __name__ == "__main__":
-    cfg = get_config()
-    run_name = f"{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
+    parser = get_argparser()
+    args = parser.parse_args()
+    config_path = args.config_file
+    output_dir = args.output_dir
 
-    logger = get_logger(cfg, run_name)
+    cfg = omegaconf.OmegaConf.load(config_path)
+    cfg.batch_size = int(cfg.num_envs * cfg.num_steps)
+    cfg.minibatch_size = int(cfg.batch_size // cfg.num_minibatches)
+    cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
+    run_name = f"{cfg.exp_name}_{int(time.time())}"
 
-    set_seeds(cfg)
+    os.makedirs(f"{output_dir}/{run_name}", exist_ok=True)
+    omegaconf.OmegaConf.save(cfg, f"{output_dir}/{run_name}/config.yaml")
+
+    writer = SummaryWriter(f"{output_dir}/tensorboard/{run_name}")
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s"
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(cfg).items()])),
+    )
+
+    # TRY NOT TO MODIFY: seeding
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     if cfg.cuda:
         assert torch.cuda.is_available(), "CUDA is not available"
     device = torch.device("cuda" if cfg.cuda else "cpu")
     print("Using", device)
 
-    envs = gym.vector.SyncVectorEnv([make_env(cfg) for i in range(cfg.num_envs)])
-    assert isinstance(
-        envs.single_action_space, gym.spaces.Box
-    ), "only continuous action space is supported"
+    agent = train(cfg, writer, device)
 
-    agent = PPO(envs, features_dim=256, visionless=cfg.visionless).to(device)
-    agent.summary()
-    optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
+    if cfg.save_model:
+        os.makedirs(f"{output_dir}/models/{run_name}", exist_ok=True)
+        model_path = f"{output_dir}/models/{run_name}/{cfg.exp_name}.model"
+        torch.save(agent.state_dict(), model_path)
+        print(f"model saved to {model_path}")
 
-    train(cfg, agent, optimizer, envs, device)
+        episodic_returns = evaluate(
+            gym.vector.SyncVectorEnv([make_env()]),
+            cfg.feature_dim,
+            model_path=model_path,
+            eval_episodes=10,
+            Model=PPO,
+            device=device,
+        )
+        for idx, episodic_return in enumerate(episodic_returns):
+            writer.add_scalar("eval/episodic_return", episodic_return, idx)
 
-    envs.close()
+    writer.close()

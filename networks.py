@@ -1,14 +1,8 @@
 import torch
 import torch.nn as nn
-from torch.distributions.normal import Normal
 from torchsummary import summary
+from torch.distributions.normal import Normal
 import numpy as np
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
 
 
 class FeaturesExtractor3D(nn.Module):
@@ -43,56 +37,14 @@ class FeaturesExtractor3D(nn.Module):
             n_flatten = self.cnn(sample_input).shape[1]
 
         self.mlp = nn.Sequential(
-            layer_init(nn.Linear(n_flatten, features_dim)),
+            nn.Linear(n_flatten, features_dim),
             nn.ReLU(),
-            layer_init(nn.Linear(features_dim, features_dim)),
+            nn.Linear(features_dim, features_dim),
             nn.ReLU(),
         )
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         return self.mlp(self.cnn(observations))
-
-
-class FeaturesExtractor1D(nn.Module):
-    def __init__(self, observation_shape, features_dim):
-        super().__init__()
-        assert len(observation_shape) == 1
-        self.observation_shape = observation_shape
-        self.mlp = nn.Sequential(
-            layer_init(nn.Linear(np.prod(observation_shape), features_dim)),
-            nn.ReLU(),
-            layer_init(nn.Linear(features_dim, features_dim)),
-            nn.ReLU(),
-        )
-
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        return self.mlp(observations)
-
-
-class PPO(nn.Module):
-    def __init__(self, envs, features_dim, visionless=False):
-        super().__init__()
-        self.features_dim = features_dim
-        self.action_space = np.prod(envs.single_action_space.shape)
-        self.observation_shape = envs.single_observation_space.shape
-        if visionless:
-            self.features_extractor = FeaturesExtractor1D(
-                self.observation_shape, features_dim
-            )
-        else:
-            self.features_extractor = FeaturesExtractor3D(
-                self.observation_shape, features_dim
-            )
-        self.critic = nn.Sequential(layer_init(nn.Linear(features_dim, 1), std=1.0))
-        self.actor_mean = nn.Sequential(
-            layer_init(
-                nn.Linear(features_dim, self.action_space),
-                std=0.01,
-            )
-        )
-        self.actor_logstd = nn.Parameter(
-            torch.zeros(1, self.action_space, dtype=torch.float32)
-        )
 
     def summary(self):
         print("Observation shape: ", self.observation_shape)
@@ -100,18 +52,51 @@ class PPO(nn.Module):
         print("Features dim: ", self.features_dim)
         print("Features extractor: ")
         summary(self.features_extractor, self.observation_shape)
-        print("\nCritic: ")
-        summary(self.critic, (self.features_dim,))
-        print("\nActor: ")
-        summary(self.actor_mean, (self.features_dim,))
+
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+
+class PPO(nn.Module):
+    def __init__(self, envs, feature_dim=64):
+        super().__init__()
+        self.critic = nn.Sequential(
+            layer_init(
+                nn.Linear(
+                    np.array(envs.single_observation_space.shape).prod(), feature_dim
+                )
+            ),
+            nn.Tanh(),
+            layer_init(nn.Linear(feature_dim, feature_dim)),
+            nn.Tanh(),
+            layer_init(nn.Linear(feature_dim, 1), std=1.0),
+        )
+        self.actor_mean = nn.Sequential(
+            layer_init(
+                nn.Linear(
+                    np.array(envs.single_observation_space.shape).prod(), feature_dim
+                )
+            ),
+            nn.Tanh(),
+            layer_init(nn.Linear(feature_dim, feature_dim)),
+            nn.Tanh(),
+            layer_init(
+                nn.Linear(feature_dim, np.prod(envs.single_action_space.shape)),
+                std=0.01,
+            ),
+        )
+        self.actor_logstd = nn.Parameter(
+            torch.zeros(1, np.prod(envs.single_action_space.shape))
+        )
 
     def get_value(self, x):
-        features = self.features_extractor(x)
-        return self.critic(features)
+        return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        features = self.features_extractor(x)
-        action_mean = self.actor_mean(features)
+        action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
         probs = Normal(action_mean, action_std)
@@ -121,5 +106,5 @@ class PPO(nn.Module):
             action,
             probs.log_prob(action).sum(1),
             probs.entropy().sum(1),
-            self.critic(features),
+            self.critic(x),
         )
