@@ -83,22 +83,10 @@ class PPO(nn.Module):
             self.features_extractor = FeaturesExtractor3D(
                 self.observation_shape, features_dim
             )
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(features_dim, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
-        )
-        self.actor_mean = nn.Sequential(
-            layer_init(nn.Linear(features_dim, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(
-                nn.Linear(64, self.action_space),
-                std=0.01,
-            ),
+        self.critic = layer_init(nn.Linear(features_dim, 1), std=1.0)
+        self.actor_mean = layer_init(
+            nn.Linear(features_dim, self.action_space),
+            std=0.01,
         )
         self.actor_logstd = nn.Parameter(
             torch.zeros(1, self.action_space, dtype=torch.float32)
@@ -110,9 +98,9 @@ class PPO(nn.Module):
         print("Features dim: ", self.features_dim)
         print("Features extractor: ")
         summary(self.features_extractor, self.observation_shape)
-        print("Critic: ")
+        print("\nCritic: ")
         summary(self.critic, (self.features_dim,))
-        print("Actor: ")
+        print("\nActor: ")
         summary(self.actor_mean, (self.features_dim,))
 
     def get_value(self, x):
