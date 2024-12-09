@@ -18,14 +18,12 @@ class RadiotherapyEnv(gym.Env):
     MIN_ANGLE_Z = np.pi / 4
     BEAM_DOSE = 0.1
     LUNG_DOSE_THRESHOLD = 0.2
-    LUNG_DOSE_REWARD = 0.0
-    TUMOUR_DOSE_REWARD = 0.0
-    OVERSHOOT_TRANSLATION_REWARD = 0.0
-    OVERSHOOT_ROTATION_REWARD = 0.0
+    TUMOUR_DOSE_THRESHOLD = 0.9
+    LUNG_DOSE_REWARD = -1.0
+    TUMOUR_DOSE_REWARD = 10.0
     DISTANCE_TO_TUMOUR_REWARD = -1.0
-    STILL_PENALTY_REWARD = 0.0
-    MOVEMENT_THRESHOLD = 0.5
-    ROTATION_THRESHOLD = np.pi / 8
+    MOVEMENT_SPEED = 0.2
+    ROTATION_SPEED = 0.5
 
     TUMOUR_DIRS = [x for x in os.listdir("./data/tumours") if x.endswith(".npy")]
     LUNGS_ARRAY = np.load("./data/lungs.npy").astype(np.float32)
@@ -121,7 +119,10 @@ class RadiotherapyEnv(gym.Env):
             np.ndarray: The translation vector. Range is [0, shape - 1].
         """
         clipped_translation = np.clip(normalized_translation, -1.0, 1.0)
-        return clipped_translation * self.LUNG_SHAPE
+        rescaled_translation = (
+            clipped_translation * self.LUNG_SHAPE * self.MOVEMENT_SPEED
+        )
+        return rescaled_translation
 
     def map_rotation(self, normalized_rotation):
         """
@@ -136,9 +137,9 @@ class RadiotherapyEnv(gym.Env):
 
         rotation_bounds = np.pi
         clipped_rotation = np.clip(normalized_rotation, -1.0, 1.0)
-        rotation_vector = clipped_rotation * rotation_bounds
+        rescaled_rotation = clipped_rotation * rotation_bounds * self.ROTATION_SPEED
 
-        return rotation_vector
+        return rescaled_rotation
 
     def tumour_position(self):
         tumour_mask = np.stack(np.where(self.tumours == 1.0), axis=-1)
@@ -179,33 +180,12 @@ class RadiotherapyEnv(gym.Env):
 
         return lung_dose_reward
 
-    def overshoot_reward(self, translation_overshoot, rotation_overshoot):
-        translation_reward = (
-            np.linalg.norm(translation_overshoot)
-            / np.linalg.norm(self.LUNG_SHAPE)
-            * self.OVERSHOOT_TRANSLATION_REWARD
-        )
-        rotation_reward = rotation_overshoot / np.pi * self.OVERSHOOT_ROTATION_REWARD
-
-        return translation_reward + rotation_reward
-
-    def still_penalty_reward(self, translation, rotation):
-        translation_magnitude = np.linalg.norm(translation)
-        rotation_magnitude = np.linalg.norm(rotation)
-
-        if (
-            translation_magnitude < self.MOVEMENT_THRESHOLD
-            and rotation_magnitude < self.ROTATION_THRESHOLD
-        ):
-            return self.STILL_PENALTY_REWARD
-        return 0.0
-
     def is_fully_irradiated(self):
         tumour_dose = self.dose * self.tumours
         total_tumour_dose = np.sum(tumour_dose)
         total_tumour = np.sum(self.tumours)
 
-        if total_tumour_dose / total_tumour >= 0.99:
+        if total_tumour_dose / total_tumour >= self.TUMOUR_DOSE_THRESHOLD:
             return True
         return False
 
@@ -232,19 +212,9 @@ class RadiotherapyEnv(gym.Env):
 
         tumour_dose_reward = self.tumour_dose_reward()
         lungs_dose_reward = self.lungs_dose_reward()
-        overshoot_reward = self.overshoot_reward(
-            overshoot_translation, overshoot_rotation
-        )
-        still_penalty_reward = self.still_penalty_reward(translation, rotation)
         distance_to_tumour_reward = self.distance_to_tumour_reward()
 
-        reward = (
-            tumour_dose_reward
-            + lungs_dose_reward
-            + overshoot_reward
-            + still_penalty_reward
-            + distance_to_tumour_reward
-        )
+        reward = tumour_dose_reward + lungs_dose_reward + distance_to_tumour_reward
 
         self.done = self.is_fully_irradiated() or self.t >= self.MAX_TIME_STEPS
 
@@ -252,8 +222,6 @@ class RadiotherapyEnv(gym.Env):
             "reward_components": {
                 "tumour": tumour_dose_reward,
                 "lung": lungs_dose_reward,
-                "overshoot": overshoot_reward,
-                "movement": still_penalty_reward,
                 "distance_to_tumour": distance_to_tumour_reward,
             },
             "beam_position": {
@@ -289,13 +257,11 @@ class RadiotherapyEnv(gym.Env):
     def get_vector_observation(self):
         norm_beam_position = self.beam_position / self.LUNG_SHAPE * 2 - 1
         norm_tumour_position = self.tumour_position() / self.LUNG_SHAPE * 2 - 1
-        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE
         return np.concatenate(
             [
                 norm_beam_position,
                 self.beam_direction,
                 norm_tumour_position,
-                norm_distance_to_tumour,
             ]
         )
 
@@ -364,7 +330,8 @@ def human_play():
             print(info)
             print(obs)
 
-    env.export_trajectory("trajectory.npz")
+    os.makedirs("trajectories", exist_ok=True)
+    env.export_trajectory("trajectories/trajectory.npz")
     env.close()
 
 
