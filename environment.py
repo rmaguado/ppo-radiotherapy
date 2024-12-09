@@ -156,7 +156,7 @@ class RadiotherapyEnv(gym.Env):
     def distance_to_tumour_reward(self):
         distance = self.distance_to_tumour()
         distance_norm = np.linalg.norm(distance)
-        relative_distance = distance_norm / np.max(self.LUNG_SHAPE)
+        relative_distance = distance_norm / np.linalg.norm(self.LUNG_SHAPE)
         return relative_distance * self.DISTANCE_TO_TUMOUR_REWARD
 
     def tumour_dose_reward(self):
@@ -289,7 +289,7 @@ class RadiotherapyEnv(gym.Env):
     def get_vector_observation(self):
         norm_beam_position = self.beam_position / self.LUNG_SHAPE * 2 - 1
         norm_tumour_position = self.tumour_position() / self.LUNG_SHAPE * 2 - 1
-        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE * 2 - 1
+        norm_distance_to_tumour = self.distance_to_tumour() / self.LUNG_SHAPE
         return np.concatenate(
             [
                 norm_beam_position,
