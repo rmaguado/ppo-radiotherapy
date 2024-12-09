@@ -278,6 +278,7 @@ def train(
         if cfg.save_model and iteration % cfg.save_model_iterations == 0:
             model_path = f"{cfg.output_dir}/{run_name}_{iteration}.model"
             torch.save(agent.state_dict(), model_path)
+            envs.export_trajectory(f"{cfg.output_dir}/trace_{run_name}_{iteration}.npz")
 
 
 if __name__ == "__main__":
