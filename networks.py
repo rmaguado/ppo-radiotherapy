@@ -88,7 +88,8 @@ class PPO(nn.Module):
             layer_init(
                 nn.Linear(features_dim, self.action_space),
                 std=0.01,
-            )
+            ),
+            nn.Tanh(),
         )
         self.actor_logstd = nn.Parameter(
             torch.zeros(1, self.action_space, dtype=torch.float32)
