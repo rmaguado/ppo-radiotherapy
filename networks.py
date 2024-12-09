@@ -88,8 +88,7 @@ class PPO(nn.Module):
             layer_init(
                 nn.Linear(features_dim, self.action_space),
                 std=0.01,
-            ),
-            nn.Tanh(),
+            )
         )
         self.actor_logstd = nn.Parameter(
             torch.zeros(1, self.action_space, dtype=torch.float32)
@@ -111,12 +110,6 @@ class PPO(nn.Module):
         return self.critic(features)
 
     def get_action_and_value(self, x, action=None):
-        # check if feature extractor params have nans
-        for param in self.features_extractor.parameters():
-            if torch.isnan(param).any():
-                print("features extractor has nans")
-                print(param)
-
         features = self.features_extractor(x)
         action_mean = self.actor_mean(features)
         action_logstd = self.actor_logstd.expand_as(action_mean)
