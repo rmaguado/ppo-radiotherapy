@@ -10,7 +10,10 @@ def evaluate(
     Model: torch.nn.Module,
     device: torch.device = torch.device("cpu"),
 ):
-    agent = Model(envs, feature_dim).to(device)
+    observation_shape = envs.single_observation_space.shape
+    action_space = envs.single_action_space.shape
+
+    agent = Model(observation_shape, action_space, feature_dim).to(device)
     agent.load_state_dict(torch.load(model_path, map_location=device))
     agent.eval()
 

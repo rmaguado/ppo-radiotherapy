@@ -52,14 +52,12 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class PPO_3DCNN(nn.Module):
-    def __init__(self, envs, feature_dim=64):
+    def __init__(self, observation_shape, action_space, feature_dim=64):
         super().__init__()
         self.feature_dim = feature_dim
-        self.observation_shape = envs.single_observation_space.shape
-        self.action_space = envs.single_action_space.shape
-        self.features_extractor = FeaturesExtractor3D(
-            self.observation_shape, feature_dim
-        )
+        self.observation_shape = observation_shape
+        self.action_space = action_space
+        self.features_extractor = FeaturesExtractor3D(observation_shape, feature_dim)
         self.critic = nn.Sequential(
             layer_init(nn.Linear(feature_dim, feature_dim)),
             nn.Tanh(),
@@ -73,11 +71,11 @@ class PPO_3DCNN(nn.Module):
             layer_init(nn.Linear(feature_dim, feature_dim)),
             nn.Tanh(),
             layer_init(
-                nn.Linear(feature_dim, np.prod(self.action_space)),
+                nn.Linear(feature_dim, np.prod(action_space)),
                 std=0.01,
             ),
         )
-        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(self.action_space)))
+        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(action_space)))
 
     def get_value(self, x):
         features = self.features_extractor(x)
@@ -107,36 +105,29 @@ class PPO_3DCNN(nn.Module):
 
 
 class PPO(nn.Module):
-    def __init__(self, envs, feature_dim=64):
+    def __init__(self, observation_shape, action_space, feature_dim=64):
         super().__init__()
+        self.feature_dim = feature_dim
+        self.observation_shape = observation_shape
+        self.action_space = action_space
         self.critic = nn.Sequential(
-            layer_init(
-                nn.Linear(
-                    np.array(envs.single_observation_space.shape).prod(), feature_dim
-                )
-            ),
+            layer_init(nn.Linear(np.array(observation_shape).prod(), feature_dim)),
             nn.Tanh(),
             layer_init(nn.Linear(feature_dim, feature_dim)),
             nn.Tanh(),
             layer_init(nn.Linear(feature_dim, 1), std=1.0),
         )
         self.actor_mean = nn.Sequential(
-            layer_init(
-                nn.Linear(
-                    np.array(envs.single_observation_space.shape).prod(), feature_dim
-                )
-            ),
+            layer_init(nn.Linear(np.array(observation_shape).prod(), feature_dim)),
             nn.Tanh(),
             layer_init(nn.Linear(feature_dim, feature_dim)),
             nn.Tanh(),
             layer_init(
-                nn.Linear(feature_dim, np.prod(envs.single_action_space.shape)),
+                nn.Linear(feature_dim, np.prod(action_space)),
                 std=0.01,
             ),
         )
-        self.actor_logstd = nn.Parameter(
-            torch.zeros(1, np.prod(envs.single_action_space.shape))
-        )
+        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(action_space)))
 
     def get_value(self, x):
         return self.critic(x)

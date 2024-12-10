@@ -93,14 +93,16 @@ def train(cfg, writer, device):
     envs = gym.vector.SyncVectorEnv(
         [make_env(visionless=cfg.visionless) for i in range(cfg.num_envs)]
     )
+    observation_shape = envs.single_observation_space.shape
+    action_space = envs.single_action_space.shape
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
 
     if cfg.visionless:
-        agent = PPO(envs, cfg.feature_dim).to(device)
+        agent = PPO(observation_shape, action_space, cfg.feature_dim).to(device)
     else:
-        agent = PPO_3DCNN(envs, cfg.feature_dim).to(device)
+        agent = PPO_3DCNN(observation_shape, action_space, cfg.feature_dim).to(device)
         agent.summary()
     optimizer = optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
 
