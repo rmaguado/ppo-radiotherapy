@@ -22,7 +22,7 @@ def set_color_body(mesh, opacity=0.25) -> None:
     mesh.visual.vertex_colors[:] = color
 
 
-def set_color_lungs(mesh, opacity=0.5) -> None:
+def set_color_lungs(mesh, opacity=0.50) -> None:
     opacity_8bit = int(255 * opacity)
     color = np.array([255, 0, 0, opacity_8bit])
 
@@ -38,7 +38,7 @@ def set_color_tumour(mesh, opacity=1.0) -> None:
     mesh.visual.vertex_colors[:] = color
 
 
-def set_color_beam(mesh, opacity=0.7) -> None:
+def set_color_beam(mesh, opacity=0.50) -> None:
     opacity_8bit = int(255 * opacity)
     color = np.array([0, 0, 255, opacity_8bit])  # Blue for the beam
     mesh.visual.face_colors[:] = color
