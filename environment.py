@@ -85,6 +85,7 @@ class RadiotherapyEnv(gym.Env):
 
     def reset_tumour(self):
         self.tumours = np.zeros_like(self.lungs, dtype=np.float32)
+        self.tumours_meta = []
 
         tumour_filename = np.random.choice(self.TUMOUR_DIRS)
         tumour_attrs = tumour_filename.split(".npy")[0].split("_")
