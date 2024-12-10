@@ -42,7 +42,7 @@ class RadiotherapyEnv(gym.Env):
         self.dose = None
         self.beams = []
 
-        self.export_gif = False
+        self.export_gif = True
 
         self.t = 0
         self.beam_position = None

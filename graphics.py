@@ -246,7 +246,7 @@ def create_scene(
         )
         for (position, direction) in beams_data
     ]
-    scene = Scene([tumours] + beams + [lungs, human_model])
+    scene = Scene(tumours + beams + [lungs, human_model])
     scene.camera_transform = camera_transform
     scene.show(resolution=(800, 600))
 
