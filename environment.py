@@ -272,15 +272,16 @@ class RadiotherapyEnv(gym.Env):
             return self.get_vector_observation()
         return self.get_volumes()
 
-    def export_animation(self):
+    def export_animation(self, output_file=None):
         from graphics import create_animation
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        if output_file is None:
+            output_file = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         create_animation(
             self.tumours_meta,
             self.beams,
             self.LUNG_SHAPE,
-            filename=f"animations/{timestamp}.gif",
+            filename=f"animations/{output_file}.gif",
             export_gif=self.export_gif,
             window=True,
         )
