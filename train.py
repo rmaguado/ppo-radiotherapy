@@ -267,6 +267,17 @@ def train(cfg, writer, device):
             lr,
         )
 
+        if cfg.save_model and (
+            iteration % cfg.save_frequency_iterations == 0
+            or iteration == cfg.num_iterations
+        ):
+            os.makedirs(f"{output_dir}/models/{run_name}", exist_ok=True)
+            model_path = (
+                f"{output_dir}/models/{run_name}/{cfg.exp_name}_{iteration}.model"
+            )
+            torch.save(agent.state_dict(), model_path)
+            print(f"model saved to {model_path}")
+
     envs.close()
     return agent
 
@@ -281,6 +292,10 @@ if __name__ == "__main__":
     cfg.batch_size = int(cfg.num_envs * cfg.num_steps)
     cfg.minibatch_size = int(cfg.batch_size // cfg.num_minibatches)
     cfg.num_iterations = cfg.total_timesteps // cfg.batch_size
+    cfg.save_frequency_iterations = (
+        cfg.num_iterations // cfg.num_saves if cfg.num_saves > 0 else 0
+    )
+
     run_name = f"{cfg.exp_name}_{int(time.time())}"
 
     os.makedirs(f"{output_dir}/{run_name}", exist_ok=True)
@@ -305,22 +320,5 @@ if __name__ == "__main__":
     print("Using", device)
 
     agent = train(cfg, writer, device)
-
-    if cfg.save_model:
-        os.makedirs(f"{output_dir}/models/{run_name}", exist_ok=True)
-        model_path = f"{output_dir}/models/{run_name}/{cfg.exp_name}.model"
-        torch.save(agent.state_dict(), model_path)
-        print(f"model saved to {model_path}")
-
-        episodic_returns = evaluate(
-            gym.vector.SyncVectorEnv([make_env(visionless=cfg.visionless)]),
-            cfg.feature_dim,
-            model_path=model_path,
-            eval_episodes=10,
-            Model=PPO,
-            device=device,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
 
     writer.close()
