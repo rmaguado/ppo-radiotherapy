@@ -40,10 +40,10 @@ class PolicyGradientAnimation(Scene):
         self.camera.background_color = WHITE
 
         environment_img = (
-            ImageMobject("environment.png").scale(0.3).to_edge(LEFT, buff=1.5)
+            ImageMobject("environment.png").scale(0.3).to_edge(LEFT, buff=1.0)
         )
-        agent_img = ImageMobject("agent.png").scale(0.3).to_edge(RIGHT, buff=3.2)
-        thinking_img = ImageMobject("thinking.png").scale(0.4).to_edge(RIGHT, buff=3.2)
+        agent_img = ImageMobject("agent.png").scale(0.3).to_edge(RIGHT, buff=2.5)
+        thinking_img = ImageMobject("thinking.png").scale(0.4).to_edge(RIGHT, buff=2.5)
         self.add(environment_img, agent_img)
         thinking_img.shift(DOWN * 1.0)
         agent_img.shift(DOWN * 1.0)
@@ -144,13 +144,10 @@ class PolicyGradientAnimation(Scene):
         )
         self.play(FadeOut(red_bar))
 
-        # updating weights label
         updating_weights_label = Text("Update Weights", color=BLACK, font_size=28)
-        # position it under the network
         updating_weights_label.next_to(agent_img, UP)
         self.play(FadeIn(updating_weights_label))
 
-        # Animate weight updates
         self.animate_network()
 
         self.play(FadeOut(updating_weights_label))
@@ -171,7 +168,6 @@ class PolicyGradientAnimation(Scene):
         node_spacing = 0.4
         line_thickness = 5
 
-        # Center neural network above the agent
         vertical_offset = UP * 2.2
         horizontal_offset = -(len(layer_nodes) - 1) * layer_spacing / 2
 
